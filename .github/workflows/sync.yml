@@ -1,0 +1,35 @@
+name: Odoo sync
+
+on:
+  schedule:
+    - cron: '30 4 * * *'   # daily 04:30 UTC = 06:30 Brussels (CEST)
+  workflow_dispatch:
+    inputs:
+      since:
+        description: 'Optional backfill start date (YYYY-MM-DD); leave empty for the normal 3-day incremental'
+        required: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run sync
+        env:
+          ODOO_BASE_URL: ${{ secrets.ODOO_BASE_URL }}
+          ODOO_DB_NAME: ${{ secrets.ODOO_DB_NAME }}
+          ODOO_USERNAME: ${{ secrets.ODOO_USERNAME }}
+          ODOO_API_KEY: ${{ secrets.ODOO_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: |
+          if [ -n "${{ inputs.since }}" ]; then
+            python3 sync_ops_dashboard.py --since "${{ inputs.since }}"
+          else
+            python3 sync_ops_dashboard.py --days 3
+          fi

@@ -1,0 +1,1936 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Gus Foods — Ops Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<style>
+  :root{
+    --bg:#F3F6F7;
+    --surface:#FFFFFF;
+    --ink:#152227;
+    --ink-soft:#5B6B72;
+    --line:#DFE7E9;
+    --teal:#0E7C86;
+    --teal-dark:#0A5E66;
+    --teal-pale:#E3F1F1;
+    --amber:#E2823D;
+    --amber-pale:#FBE9DA;
+    --green:#2E9E6E;
+    --green-pale:#DFF3EA;
+    --rose:#D6553F;
+    --rose-pale:#FBE3DE;
+    --radius:14px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:'Inter',sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .app{max-width:1320px;margin:0 auto;padding:28px 24px 80px;}
+
+  header.top{
+    display:flex;align-items:flex-end;justify-content:space-between;
+    margin-bottom:28px;flex-wrap:wrap;gap:16px;
+    border-bottom:1px solid var(--line);
+    padding-bottom:20px;
+  }
+  .brand{display:flex;align-items:center;gap:14px;}
+  .brand .mark{
+    width:38px;height:38px;border-radius:10px;
+    background:linear-gradient(160deg,var(--teal),var(--teal-dark));
+    position:relative;flex-shrink:0;
+  }
+  .brand .mark::after{
+    content:'';position:absolute;left:8px;top:7px;width:4px;height:24px;
+    background:var(--amber);border-radius:2px;
+  }
+  .brand h1{
+    font-family:'Space Grotesk',sans-serif;font-size:20px;font-weight:700;
+    margin:0;letter-spacing:-0.01em;
+  }
+  .brand p{margin:2px 0 0;font-size:13px;color:var(--ink-soft);}
+
+  .file-status{
+    font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--ink-soft);
+    display:flex;align-items:center;gap:10px;
+  }
+  .btn{
+    font-family:'Inter',sans-serif;font-weight:600;font-size:13.5px;
+    background:var(--teal);color:#fff;border:none;border-radius:9px;
+    padding:10px 16px;cursor:pointer;transition:background .15s ease;
+  }
+  .btn:hover{background:var(--teal-dark);}
+  .btn.ghost{
+    background:transparent;color:var(--teal-dark);border:1px solid var(--teal);
+  }
+  .btn.ghost:hover{background:var(--teal-pale);}
+  input[type=file]{display:none;}
+
+  /* ---------- Upload screen ---------- */
+  #uploadScreen{
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    text-align:center;padding:90px 20px;background:var(--surface);
+    border:2px dashed var(--line);border-radius:20px;
+  }
+  #uploadScreen.dragover{border-color:var(--teal);background:var(--teal-pale);}
+  #uploadScreen h2{
+    font-family:'Space Grotesk',sans-serif;font-size:24px;margin:18px 0 8px;
+  }
+  #uploadScreen p{color:var(--ink-soft);font-size:14.5px;max-width:440px;line-height:1.5;margin:0 0 22px;}
+  .fridge-icon{
+    width:56px;height:72px;border-radius:12px;border:3px solid var(--teal);
+    position:relative;
+  }
+  .fridge-icon::before{
+    content:'';position:absolute;top:26px;left:0;right:0;height:3px;background:var(--teal);
+  }
+  .fridge-icon::after{
+    content:'';position:absolute;left:10px;top:8px;width:4px;height:10px;background:var(--amber);border-radius:2px;
+  }
+  #errorBox{
+    display:none;margin-top:16px;background:var(--rose-pale);color:#8A3324;
+    font-size:13px;padding:10px 14px;border-radius:8px;font-family:'IBM Plex Mono',monospace;
+  }
+
+  /* ---------- Dashboard ---------- */
+  #dashboard{display:none;}
+
+  .controls{
+    display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:22px;
+  }
+  .seg{
+    display:flex;background:var(--surface);border:1px solid var(--line);
+    border-radius:10px;padding:3px;
+  }
+  .seg button{
+    border:none;background:transparent;font-family:'Inter';font-weight:600;
+    font-size:13px;padding:7px 14px;border-radius:8px;cursor:pointer;color:var(--ink-soft);
+  }
+  .seg button.active{background:var(--teal);color:#fff;}
+
+  select{
+    font-family:'Inter';font-size:13px;font-weight:500;color:var(--ink);
+    background:var(--surface);border:1px solid var(--line);border-radius:10px;
+    padding:8px 12px;cursor:pointer;min-width:200px;
+  }
+  .spacer{flex:1;}
+
+  .kpi-row{
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+    gap:14px;margin-bottom:22px;
+  }
+  .kpi{
+    background:var(--surface);border-radius:var(--radius);padding:18px 20px;
+    position:relative;overflow:hidden;border:1px solid var(--line);
+  }
+  .kpi::before{
+    content:'';position:absolute;left:0;top:0;bottom:0;width:5px;
+  }
+  .kpi.rev::before{background:linear-gradient(var(--teal),var(--teal-dark));}
+  .kpi.units::before{background:linear-gradient(var(--teal-dark),var(--teal));}
+  .kpi.scrap::before{background:var(--amber);}
+  .kpi.adj::before{background:linear-gradient(var(--green),var(--rose));}
+  .kpi .label{
+    font-size:11.5px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;
+    color:var(--ink-soft);margin-bottom:6px;
+  }
+  .kpi .value{
+    font-family:'Space Grotesk',sans-serif;font-size:26px;font-weight:700;
+  }
+  .kpi .sub{font-size:12px;color:var(--ink-soft);margin-top:4px;font-family:'IBM Plex Mono',monospace;}
+
+  .chart-grid{
+    display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:22px;
+  }
+  .chart-card{
+    background:var(--surface);border-radius:var(--radius);padding:18px 20px;
+    border:1px solid var(--line);
+  }
+  .chart-card.full{grid-column:1/-1;}
+  .chart-card h3{
+    font-family:'Space Grotesk',sans-serif;font-size:15px;margin:0 0 14px;font-weight:600;
+  }
+  .chart-card .card-head{
+    display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px;
+  }
+  .chart-card .card-head h3{margin:0;}
+  .chart-card .card-head select{min-width:170px;font-size:12.5px;padding:6px 10px;}
+
+  .period-picker{position:relative;}
+  .period-picker-btn{
+    font-family:'Inter';font-size:12.5px;font-weight:500;color:var(--ink);
+    background:var(--surface);border:1px solid var(--line);border-radius:10px;
+    padding:8px 12px;cursor:pointer;min-width:170px;text-align:left;
+    display:flex;align-items:center;justify-content:space-between;gap:8px;
+  }
+  .period-picker-btn:after{content:'▾';color:var(--ink-soft);font-size:10px;}
+  .period-picker-panel{
+    display:none;position:absolute;right:0;top:calc(100% + 6px);z-index:10;
+    background:var(--surface);border:1px solid var(--line);border-radius:10px;
+    box-shadow:0 8px 24px rgba(21,34,39,0.12);padding:8px;min-width:230px;
+    max-height:280px;overflow:auto;
+  }
+  .period-picker.open .period-picker-panel{display:block;}
+  .period-picker-actions{
+    display:flex;flex-wrap:wrap;gap:6px;padding:4px 6px 8px;border-bottom:1px solid var(--line);margin-bottom:6px;
+  }
+  .period-picker-actions button{
+    font-family:'Inter';font-size:11px;font-weight:600;color:var(--teal-dark);
+    background:var(--teal-pale);border:none;border-radius:6px;padding:4px 8px;cursor:pointer;
+  }
+  .period-picker-option{
+    display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:6px;font-size:12.5px;cursor:pointer;
+  }
+  .period-picker-option:hover{background:var(--teal-pale);}
+  .period-picker-option input{margin:0;cursor:pointer;}
+  .chart-card .wrap{position:relative;height:260px;}
+  .chart-svg{width:100%;height:100%;display:block;}
+  .chart-svg svg{width:100%;height:100%;}
+  .chart-tooltip{
+    position:absolute;display:none;pointer-events:none;
+    background:var(--ink);color:#fff;font-family:'IBM Plex Mono',monospace;
+    font-size:11.5px;padding:7px 10px;border-radius:7px;white-space:nowrap;
+    box-shadow:0 6px 18px rgba(21,34,39,0.22);z-index:6;line-height:1.55;
+    transform:translate(-6px,-100%);
+  }
+  .chart-tooltip .tt-label{font-family:'Inter',sans-serif;font-weight:600;display:block;margin-bottom:2px;}
+
+  table.data{
+    width:100%;border-collapse:collapse;font-size:13px;
+  }
+  table.data thead th{
+    text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;
+    color:var(--ink-soft);border-bottom:1px solid var(--line);padding:9px 10px;
+    position:sticky;top:0;background:var(--surface);cursor:pointer;user-select:none;
+  }
+  table.data tbody td{
+    padding:8px 10px;border-bottom:1px solid #EEF2F3;font-family:'IBM Plex Mono',monospace;
+    font-size:12.5px;
+  }
+  table.data tbody td:first-child, table.data tbody td:nth-child(2){
+    font-family:'Inter';font-size:13px;
+  }
+  table.data tbody tr:hover{background:#FAFCFC;}
+  .table-scroll{max-height:420px;overflow:auto;border-radius:10px;}
+
+  .detail-header{
+    display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;
+    margin-bottom:14px;
+  }
+  .detail-header h3{margin:0;}
+  .detail-controls{display:flex;align-items:center;gap:10px;}
+
+  .matrix-scroll{max-height:480px;overflow:auto;border-radius:10px;border:1px solid var(--line);}
+  table.matrix{border-collapse:collapse;font-size:11.5px;font-family:'IBM Plex Mono',monospace;}
+  table.matrix th, table.matrix td{
+    padding:5px 8px;text-align:right;white-space:nowrap;border-bottom:1px solid #EEF2F3;border-right:1px solid #EEF2F3;
+  }
+  table.matrix thead th{
+    position:sticky;top:0;background:var(--surface);z-index:2;font-weight:600;color:var(--ink-soft);
+    font-size:10.5px;text-align:center;
+  }
+  table.matrix tbody th{
+    position:sticky;left:0;background:var(--surface);z-index:1;text-align:left;
+    font-family:'Inter';font-size:12px;font-weight:500;max-width:170px;overflow:hidden;
+    text-overflow:ellipsis;white-space:nowrap;border-right:2px solid var(--line);
+  }
+  table.matrix thead th:first-child{position:sticky;left:0;top:0;z-index:3;background:var(--surface);}
+  table.matrix tbody tr:hover td, table.matrix tbody tr:hover th{background:var(--teal-pale);}
+  table.matrix td.avg-col, table.matrix th.avg-col{
+    border-left:2px solid var(--line);font-weight:600;background:#FAFCFC;
+  }
+  .matrix-legend{
+    display:flex;align-items:center;gap:8px;margin-top:10px;font-size:11px;color:var(--ink-soft);
+  }
+  .legend-scale{display:flex;height:10px;border-radius:5px;overflow:hidden;width:140px;}
+  .legend-scale span{flex:1;}
+
+  .neg{color:var(--rose);}
+  .pos{color:var(--green);}
+
+  .margin-card{margin-bottom:22px;}
+  .margin-rows{display:flex;flex-direction:column;gap:2px;}
+  .margin-row{
+    display:flex;align-items:baseline;justify-content:space-between;gap:16px;
+    padding:9px 4px;font-size:14px;border-bottom:1px solid #EEF2F3;
+  }
+  .margin-row span:first-child{color:var(--ink-soft);}
+  .margin-row span:last-child{font-family:'IBM Plex Mono',monospace;font-weight:500;}
+  .margin-row.total-row{
+    border-bottom:none;border-top:2px solid var(--ink);margin-top:4px;padding-top:12px;
+  }
+  .margin-row.total-row span:first-child{color:var(--ink);font-weight:700;font-size:15px;}
+  .margin-row.total-row span:last-child{font-size:20px;font-weight:700;font-family:'Space Grotesk',sans-serif;}
+  .margin-note{font-size:12px;color:var(--ink-soft);margin-top:10px;}
+
+  footer.note{
+    margin-top:20px;font-size:12px;color:var(--ink-soft);text-align:center;
+  }
+
+  .ongoing-toggle{
+    font-size:12.5px;color:var(--ink-soft);display:flex;align-items:center;gap:6px;cursor:pointer;
+    user-select:none;
+  }
+  .ongoing-toggle input{cursor:pointer;}
+  .ongoing-notice{
+    background:var(--amber-pale);border:1px solid var(--amber);border-radius:10px;
+    padding:10px 16px;font-size:13px;color:#7A4A1E;margin-bottom:16px;
+  }
+
+  /* ---------- New: insight banner ---------- */
+  .insight-banner{
+    background:var(--teal-pale);border:1px solid var(--teal);border-radius:12px;
+    padding:13px 18px;font-size:13.5px;line-height:1.6;color:var(--teal-dark);
+    margin-bottom:22px;display:none;
+  }
+  .insight-banner.show{display:block;}
+  .insight-banner b{color:var(--ink);}
+
+  /* ---------- New: KPI delta + sparkline ---------- */
+  .kpi-delta{font-size:12.5px;font-weight:600;margin-top:8px;font-family:'IBM Plex Mono',monospace;}
+  .kpi-delta .arrow{margin-right:3px;}
+  .kpi-spark{height:34px;margin-top:8px;}
+  .kpi-spark svg{width:100%;height:100%;display:block;}
+
+  /* ---------- New: anomaly list ---------- */
+  #anomalyCard{margin-bottom:22px;}
+  .anomaly-item{
+    display:flex;align-items:flex-start;gap:10px;padding:10px 4px;
+    border-bottom:1px solid #EEF2F3;font-size:13px;
+  }
+  .anomaly-item:last-child{border-bottom:none;}
+  .anomaly-dot{
+    width:8px;height:8px;border-radius:50%;margin-top:5px;flex-shrink:0;
+  }
+  .anomaly-dot.warn{background:var(--amber);}
+  .anomaly-dot.bad{background:var(--rose);}
+  .anomaly-item b{font-family:'IBM Plex Mono',monospace;}
+  .anomaly-empty{color:var(--ink-soft);font-size:13px;padding:6px 4px;}
+
+  /* ---------- New: threshold input on chart card head ---------- */
+  .threshold-input{
+    font-size:12px;color:var(--ink-soft);display:flex;align-items:center;gap:5px;
+  }
+  .threshold-input input{
+    width:52px;font-family:'IBM Plex Mono',monospace;font-size:12px;
+    border:1px solid var(--line);border-radius:6px;padding:4px 6px;color:var(--ink);
+  }
+
+  /* ---------- New: fridges-to-watch movers grid ---------- */
+  .movers-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;}
+  .movers-col h4{
+    font-family:'Inter';font-size:12px;text-transform:uppercase;letter-spacing:.05em;
+    color:var(--ink-soft);margin:0 0 10px;font-weight:600;
+  }
+  .movers-row{
+    display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid #EEF2F3;
+    font-size:13px;
+  }
+  .movers-row:last-child{border-bottom:none;}
+  .movers-row .m-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .movers-row .m-delta{
+    font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:12.5px;white-space:nowrap;
+  }
+  .movers-empty{color:var(--ink-soft);font-size:13px;padding:6px 4px;}
+
+  /* ---------- Login screen ---------- */
+  #loginScreen{
+    display:none;flex-direction:column;align-items:center;justify-content:center;
+    text-align:center;padding:90px 20px;background:var(--surface);
+    border:1px solid var(--line);border-radius:20px;
+  }
+  #loginScreen h2{font-family:'Space Grotesk',sans-serif;font-size:24px;margin:18px 0 6px;}
+  #loginScreen p{color:var(--ink-soft);font-size:14px;margin:0 0 24px;}
+  #loginForm{display:flex;flex-direction:column;gap:12px;width:100%;max-width:320px;}
+  #loginForm input{
+    font-family:'Inter',sans-serif;font-size:14px;color:var(--ink);
+    background:var(--surface);border:1px solid var(--line);border-radius:9px;
+    padding:11px 14px;
+  }
+  #loginForm input:focus{outline:none;border-color:var(--teal);}
+  #loginError{
+    display:none;background:var(--rose-pale);color:#8A3324;font-size:13px;
+    padding:10px 14px;border-radius:8px;font-family:'IBM Plex Mono',monospace;
+  }
+
+  @media print{
+    #uploadScreen, .controls .seg, #scopeSelect, .file-status button, .period-picker,
+    .threshold-input, footer.note{ display:none !important; }
+    body{background:#fff;}
+    .chart-card{break-inside:avoid;}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header class="top">
+    <div class="brand">
+      <div class="mark"></div>
+      <div>
+        <h1>Gus Foods — Ops Dashboard</h1>
+        <p>Sales · Scrap · Stock Adjustments — weekly or monthly, total or per fridge</p>
+      </div>
+    </div>
+    <div class="file-status">
+      <span id="fileStatusText">No file loaded</span>
+      <button class="btn ghost" id="exportBtn" style="display:none;">Export snapshot</button>
+      <button class="btn ghost" id="reloadBtn" style="display:none;">Refresh data</button>
+      <button class="btn ghost" id="signOutBtn" style="display:none;">Sign out</button>
+    </div>
+  </header>
+
+  <div id="loginScreen">
+    <div class="fridge-icon"></div>
+    <h2>Sign in</h2>
+    <p>This dashboard is for the Gus Foods team. Sign in with your dashboard account.</p>
+    <form id="loginForm">
+      <input type="email" id="loginEmail" placeholder="Email" autocomplete="username" required />
+      <input type="password" id="loginPassword" placeholder="Password" autocomplete="current-password" required />
+      <button class="btn" type="submit" id="loginSubmit">Sign in</button>
+      <div id="loginError"></div>
+    </form>
+  </div>
+
+  <div id="uploadScreen" style="display:none;">
+    <div class="fridge-icon"></div>
+    <h2 id="uploadHeading">Loading from Supabase…</h2>
+    <p>This dashboard reads live from the Odoo sync in Supabase. If the database is
+       unreachable or still empty, you can fall back to importing an <strong>.xlsx</strong>
+       export (Warehouses, StockMoves_Raw, SalesOrderLines_Raw tabs — Products optional)
+       by dropping it here.</p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;">
+      <button class="btn" id="retryDbBtn">Retry database</button>
+      <button class="btn ghost" id="pickFileBtn">Import .xlsx instead</button>
+    </div>
+    <input type="file" id="fileInput" accept=".xlsx" />
+    <div id="errorBox"></div>
+  </div>
+
+  <div id="dashboard">
+    <div class="controls">
+      <div class="seg" id="granSeg">
+        <button data-gran="week" class="active">Week</button>
+        <button data-gran="month">Month</button>
+      </div>
+      <div class="seg" id="valueSeg">
+        <button data-mode="units" class="active">Units</button>
+        <button data-mode="eur">€ (cost)</button>
+        <button data-mode="percent">% of sales</button>
+      </div>
+      <select id="warehouseSelect"></select>
+      <select id="categorySelect"></select>
+      <select id="scopeSelect">
+        <option value="1">Latest period</option>
+        <option value="4">Last 4 periods</option>
+        <option value="8">Last 8 periods</option>
+        <option value="13">Last 13 periods</option>
+        <option value="all">All periods</option>
+        <option value="custom">Choose a specific period…</option>
+      </select>
+      <select id="customPeriodSelect" style="display:none;"></select>
+      <label class="ongoing-toggle"><input type="checkbox" id="excludeOngoing" checked /> Exclude in-progress period</label>
+      <div class="spacer"></div>
+      <span class="file-status" id="rangeLabel"></span>
+    </div>
+
+    <div class="ongoing-notice" id="ongoingNotice" style="display:none;"></div>
+
+    <div class="insight-banner" id="insightBanner"></div>
+
+    <div class="kpi-row">
+      <div class="kpi rev">
+        <div class="label">Revenue</div>
+        <div class="value" id="kpiRevenue">—</div>
+        <div class="sub" id="kpiRevenueSub">—</div>
+        <div class="kpi-delta" id="kpiRevenueDelta"></div>
+        <div class="kpi-spark" id="sparkRevenue"></div>
+      </div>
+      <div class="kpi units">
+        <div class="label">Units sold</div>
+        <div class="value" id="kpiUnits">—</div>
+        <div class="sub" id="kpiUnitsSub">—</div>
+        <div class="kpi-delta" id="kpiUnitsDelta"></div>
+        <div class="kpi-spark" id="sparkUnits"></div>
+      </div>
+      <div class="kpi scrap">
+        <div class="label">Scrap (waste)</div>
+        <div class="value" id="kpiScrap">—</div>
+        <div class="sub" id="kpiScrapSub">—</div>
+        <div class="kpi-delta" id="kpiScrapDelta"></div>
+        <div class="kpi-spark" id="sparkScrap"></div>
+      </div>
+      <div class="kpi adj">
+        <div class="label">Stock adjustments (net)</div>
+        <div class="value" id="kpiAdj">—</div>
+        <div class="sub" id="kpiAdjSub">—</div>
+        <div class="kpi-delta" id="kpiAdjDelta"></div>
+        <div class="kpi-spark" id="sparkAdj"></div>
+      </div>
+    </div>
+
+    <div class="chart-card full" id="anomalyCard">
+      <h3>Needs attention <span id="anomalyScope" style="font-weight:400;color:var(--ink-soft);"></span></h3>
+      <div id="anomalyList"></div>
+    </div>
+
+    <div class="chart-card full margin-card">
+      <h3>Margin breakdown <span id="marginScope" style="font-weight:400;color:var(--ink-soft);"></span></h3>
+      <div class="margin-rows">
+        <div class="margin-row"><span>Revenue</span><span id="marginRevenue">—</span></div>
+        <div class="margin-row"><span>− Cost of goods sold (COGS)</span><span id="marginReceipts">—</span></div>
+        <div class="margin-row"><span>− Scrap</span><span id="marginScrap">—</span></div>
+        <div class="margin-row"><span>− Stock adjustments (net loss)</span><span id="marginAdj">—</span></div>
+        <div class="margin-row total-row"><span>= Net margin</span><span id="marginTotal">—</span></div>
+      </div>
+      <div class="margin-note" id="marginNote"></div>
+    </div>
+
+    <div class="chart-grid">
+      <div class="chart-card full">
+        <div class="card-head">
+          <h3>Revenue over time <span style="font-weight:400;font-size:12px;color:var(--ink-soft);">(range also applies to Scrap % and Adjustments % below)</span></h3>
+          <div id="trendPeriodPicker" class="period-picker"></div>
+        </div>
+        <div class="wrap"><div id="chartRevenue" class="chart-svg"></div></div>
+      </div>
+      <div class="chart-card">
+        <div class="card-head">
+          <h3>Scrap as % of sales</h3>
+          <label class="threshold-input">Target <input type="number" id="scrapTarget" step="0.5" min="0" value="5" />%</label>
+        </div>
+        <div class="wrap"><div id="chartScrap" class="chart-svg"></div></div>
+      </div>
+      <div class="chart-card">
+        <div class="card-head">
+          <h3>Stock adjustments (net) as % of sales</h3>
+          <label class="threshold-input">Target <input type="number" id="adjTarget" step="0.5" value="-2" />%</label>
+        </div>
+        <div class="wrap"><div id="chartAdj" class="chart-svg"></div></div>
+      </div>
+      <div class="chart-card full">
+        <div class="card-head">
+          <h3>Top fridges by revenue</h3>
+          <div id="topPeriodPicker" class="period-picker"></div>
+        </div>
+        <div class="wrap" style="height:320px;"><div id="chartTopWarehouses" class="chart-svg"></div></div>
+      </div>
+    </div>
+
+    <div class="chart-card full">
+      <div class="detail-header">
+        <h3>Fridges to watch <span id="moversScope" style="font-weight:400;color:var(--ink-soft);"></span></h3>
+      </div>
+      <div class="movers-grid">
+        <div class="movers-col">
+          <h4>Biggest revenue changes</h4>
+          <div id="moversRevenue"></div>
+        </div>
+        <div class="movers-col">
+          <h4>Biggest scrap % changes</h4>
+          <div id="moversScrap"></div>
+        </div>
+      </div>
+    </div>
+
+    <footer class="note">Scrap and stock adjustment trend charts always show % of sales. "Fridges to watch" always compares scrap in € (cost) when product cost data is available. The Units/€/% toggle above only affects the KPI cards.</footer>
+  </div>
+
+</div>
+
+<script>
+(function(){
+  const uploadScreen = document.getElementById('uploadScreen');
+  const dashboard = document.getElementById('dashboard');
+  const fileInput = document.getElementById('fileInput');
+  const pickFileBtn = document.getElementById('pickFileBtn');
+  const reloadBtn = document.getElementById('reloadBtn');
+  const fileStatusText = document.getElementById('fileStatusText');
+  const errorBox = document.getElementById('errorBox');
+
+  pickFileBtn.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', e => { if(e.target.files[0]) handleFile(e.target.files[0]); });
+
+  document.getElementById('retryDbBtn').addEventListener('click', () => bootFromSupabase());
+
+  // In Supabase mode this button re-pulls fresh data; in .xlsx mode it swaps the file.
+  reloadBtn.addEventListener('click', () => {
+    if(DATA_SOURCE === 'supabase') bootFromSupabase();
+    else fileInput.click();
+  });
+
+  ['dragover','dragenter'].forEach(evt=>{
+    uploadScreen.addEventListener(evt, e=>{ e.preventDefault(); uploadScreen.classList.add('dragover'); });
+  });
+  ['dragleave','drop'].forEach(evt=>{
+    uploadScreen.addEventListener(evt, e=>{ e.preventDefault(); uploadScreen.classList.remove('dragover'); });
+  });
+  uploadScreen.addEventListener('drop', e=>{
+    const f = e.dataTransfer.files[0];
+    if(f) handleFile(f);
+  });
+
+  function showError(msg){
+    errorBox.style.display='block';
+    errorBox.textContent = msg;
+  }
+
+  // ---------- Date/period helpers ----------
+  function pad2(n){ return String(n).padStart(2,'0'); }
+
+  function isoWeekInfo(d){
+    const utc = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    const dayNum = (utc.getUTCDay() + 6) % 7;
+    utc.setUTCDate(utc.getUTCDate() - dayNum + 3);
+    const isoYear = utc.getUTCFullYear();
+    const firstThursday = new Date(Date.UTC(isoYear,0,4));
+    const firstDayNum = (firstThursday.getUTCDay() + 6) % 7;
+    firstThursday.setUTCDate(firstThursday.getUTCDate() - firstDayNum + 3);
+    const week = 1 + Math.round((utc - firstThursday) / (7*24*60*60*1000));
+    return { year: isoYear, week };
+  }
+
+  function weekKey(d){
+    const { year, week } = isoWeekInfo(d);
+    return year*100 + week;
+  }
+  function weekLabel(d){
+    const { year, week } = isoWeekInfo(d);
+    return 'W' + pad2(week) + '-' + year;
+  }
+  function monthKey(d){
+    return d.getFullYear()*100 + (d.getMonth()+1);
+  }
+  function monthLabel(d){
+    return pad2(d.getMonth()+1) + '-' + d.getFullYear();
+  }
+
+  function toDate(v){
+    if(v instanceof Date) return v;
+    if(typeof v === 'number'){
+      return new Date(Math.round((v - 25569) * 86400 * 1000));
+    }
+    if(typeof v === 'string'){
+      const d = new Date(v);
+      if(!isNaN(d)) return d;
+    }
+    return null;
+  }
+
+  // ---------- Global state ----------
+  let RAW = { warehouses:[], products:[], moves:[], sales:[] };
+  let PRODUCT_COST_MAP = {};
+  let PRODUCT_CATEGORY_MAP = {};
+  let AGG = { week: null, month: null };
+  let ALL_PERIODS = { week: [], month: [] };
+  let ALL_WAREHOUSES = [];
+  let ALL_CATEGORIES = [];
+  let currentGran = 'week';
+  let currentValueMode = 'units'; // 'units' | 'eur' | 'percent'
+  let currentCategoryFilter = '__ALL__';
+
+  // ---------- Supabase (primary data source) ----------
+  // The dashboard reads a PRE-AGGREGATED rollup via three read-only RPCs. It never
+  // downloads raw stock moves / sales lines — at ~370k rows and climbing that would be
+  // tens of MB per page load. The publishable key below is safe to ship in this file:
+  // anon has EXECUTE on the three get_ops_* functions and nothing else. It cannot read
+  // any table, cannot read the rollup matview directly, and cannot write.
+  const SUPABASE_URL = 'https://evwfqounmubytvxmlinj.supabase.co';
+  const SUPABASE_KEY = 'sb_publishable_a30gMuPvOOHm5vZmWuaZ7Q_jJdTe07b';
+
+  // Auth: the get_ops_* RPCs are only granted to the `authenticated` role, so every
+  // data request must carry a logged-in user's access token. The publishable key alone
+  // identifies the project but returns no data. Users are managed in Supabase Auth.
+  const sbAuth = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  let DATA_SOURCE = null;   // 'supabase' | 'xlsx' — which path populated AGG
+  let HAS_COST = false;     // does cost data exist? drives € mode + margin card
+  let META = null;          // { refreshed_at, has_cost_data, move_count, sales_count }
+  // "Gus Foods WH Haren" is the central warehouse, not a fridge/selling point — any row
+  // (sale OR stock move: scrap, adjustment, receipt...) attributed to it is dropped entirely
+  // from the import, so it never counts toward "All fridges" totals and never shows up as a
+  // selectable fridge.
+  const EXCLUDED_WAREHOUSES = ['Gus Foods WH Haren'];
+
+  const CODE_RE = /^\[([^\]]+)\]/;
+  function extractProductCode(productName){
+    if(!productName) return null;
+    const m = CODE_RE.exec(productName);
+    return m ? m[1] : null;
+  }
+  function costFor(productName){
+    const code = extractProductCode(productName);
+    if(code && PRODUCT_COST_MAP[code] !== undefined) return PRODUCT_COST_MAP[code];
+    return 0;
+  }
+  function categoryFor(productName){
+    const code = extractProductCode(productName);
+    if(code && PRODUCT_CATEGORY_MAP[code] !== undefined) return PRODUCT_CATEGORY_MAP[code];
+    return null;
+  }
+  function matchesCategory(productName){
+    if(currentCategoryFilter === '__ALL__') return true;
+    return categoryFor(productName) === currentCategoryFilter;
+  }
+
+  function handleFile(file){
+    errorBox.style.display='none';
+    fileStatusText.textContent = 'Reading ' + file.name + '…';
+    const reader = new FileReader();
+    reader.onload = function(e){
+      try{
+        const data = new Uint8Array(e.target.result);
+        const wb = XLSX.read(data, { type:'array', cellDates:true });
+        processWorkbook(wb);
+        fileStatusText.textContent = file.name;
+        reloadBtn.style.display = 'inline-block';
+        document.getElementById('exportBtn').style.display = 'inline-block';
+        uploadScreen.style.display = 'none';
+        dashboard.style.display = 'block';
+      }catch(err){
+        console.error(err);
+        showError('Could not read this file: ' + err.message);
+        fileStatusText.textContent = 'No file loaded';
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  function sheetToRows(wb, name){
+    const ws = wb.Sheets[name];
+    if(!ws) return [];
+    return XLSX.utils.sheet_to_json(ws, { defval: null });
+  }
+
+  function processWorkbook(wb){
+    const requiredSheets = ['Warehouses','StockMoves_Raw','SalesOrderLines_Raw'];
+    const missing = requiredSheets.filter(s => !wb.Sheets[s]);
+    if(missing.length){
+      throw new Error('Missing tabs: ' + missing.join(', '));
+    }
+
+    RAW.warehouses = sheetToRows(wb, 'Warehouses');
+    RAW.products = sheetToRows(wb, 'Products'); // optional sheet
+    RAW.moves = sheetToRows(wb, 'StockMoves_Raw')
+      .filter(row => !EXCLUDED_WAREHOUSES.includes(row.warehouse));
+    RAW.sales = sheetToRows(wb, 'SalesOrderLines_Raw')
+      .filter(row => !EXCLUDED_WAREHOUSES.includes(row.warehouse_name));
+
+    PRODUCT_COST_MAP = {};
+    PRODUCT_CATEGORY_MAP = {};
+    const categorySet = new Set();
+    for(const p of RAW.products){
+      if(p.internal_reference){
+        PRODUCT_COST_MAP[p.internal_reference] = Number(p.cost) || 0;
+        if(p.product_category){
+          PRODUCT_CATEGORY_MAP[p.internal_reference] = p.product_category;
+          categorySet.add(p.product_category);
+        }
+      }
+    }
+    ALL_CATEGORIES = [...categorySet].sort((a,b)=>a.localeCompare(b));
+
+    computeFullWarehouseSet();
+    currentCategoryFilter = '__ALL__';
+    buildAggregates(currentCategoryFilter);
+    DATA_SOURCE = 'xlsx';
+    HAS_COST = RAW.products.length > 0;
+    reloadBtn.textContent = 'Load another file';
+    populateWarehouseSelect();
+    populateCategorySelect();
+    applyCostAvailability();
+    renderAll();
+  }
+
+  // Hides the € (cost) toggle when there is no cost data, and bounces the user back to
+  // Units if they were already on € when the data source changed.
+  function applyCostAvailability(){
+    const euroBtn = document.querySelector('#valueSeg button[data-mode="eur"]');
+    euroBtn.style.display = HAS_COST ? '' : 'none';
+    if(!HAS_COST && currentValueMode === 'eur'){
+      currentValueMode = 'units';
+      document.querySelectorAll('#valueSeg button').forEach(b => b.classList.toggle('active', b.dataset.mode==='units'));
+    }
+  }
+
+  function computeFullWarehouseSet(){
+    const set = new Set();
+    for(const row of RAW.sales){ if(row.warehouse_name) set.add(row.warehouse_name); }
+    for(const row of RAW.moves){ if(row.warehouse) set.add(row.warehouse); }
+    ALL_WAREHOUSES = [...set].sort((a,b)=>a.localeCompare(b));
+  }
+
+  // ================= Supabase data path =================
+
+  async function rpc(fn, body){
+    // getSession() transparently refreshes an expired token before we use it.
+    const { data: { session } } = await sbAuth.auth.getSession();
+    if(!session) throw new Error('Not signed in');
+    const res = await fetch(SUPABASE_URL + '/rest/v1/rpc/' + fn, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_KEY,
+        'Authorization': 'Bearer ' + session.access_token
+      },
+      body: JSON.stringify(body || {})
+    });
+    if(!res.ok){
+      const detail = (await res.text()).slice(0, 300);
+      throw new Error(fn + ' → HTTP ' + res.status + ' ' + detail);
+    }
+    return res.json();
+  }
+
+  // Turns rollup rows (one per period × fridge) into the same Map-of-Maps shape that
+  // buildAggregates() produces from the .xlsx, so every render function downstream is
+  // completely unaware of which data source it is looking at.
+  function rollupToStore(rows){
+    const blank = () => ({
+      revenue:0, units:0, cogsValue:0, scrap:0, scrapValue:0,
+      adjPos:0, adjNeg:0, adjPosValue:0, adjNegValue:0, receiptQty:0, receiptValue:0
+    });
+    const add = (t, r) => {
+      t.revenue     += Number(r.revenue)       || 0;
+      t.units       += Number(r.units)         || 0;
+      t.cogsValue   += Number(r.cogs_value)    || 0;
+      t.scrap       += Number(r.scrap_qty)     || 0;
+      t.scrapValue  += Number(r.scrap_value)   || 0;
+      t.adjPos      += Number(r.adj_pos_qty)   || 0;
+      t.adjPosValue += Number(r.adj_pos_value) || 0;
+      t.adjNeg      += Number(r.adj_neg_qty)   || 0;
+      t.adjNegValue += Number(r.adj_neg_value) || 0;
+      t.receiptQty  += Number(r.receipt_qty)   || 0;
+      t.receiptValue+= Number(r.receipt_value) || 0;
+    };
+    const store = new Map();
+    for(const r of rows){
+      const pKey = Number(r.period_key);
+      if(!store.has(pKey)) store.set(pKey, { label: r.period_label, warehouses: new Map() });
+      const entry = store.get(pKey);
+      if(!entry.warehouses.has(r.warehouse)) entry.warehouses.set(r.warehouse, blank());
+      add(entry.warehouses.get(r.warehouse), r);
+      if(!entry.warehouses.has('__ALL__')) entry.warehouses.set('__ALL__', blank());
+      add(entry.warehouses.get('__ALL__'), r);
+    }
+    return store;
+  }
+
+  async function loadFromSupabase(opts){
+    opts = opts || {};
+    const category = currentCategoryFilter === '__ALL__' ? null : currentCategoryFilter;
+    const calls = [
+      rpc('get_ops_rollup', { p_granularity:'week',  p_category: category }),
+      rpc('get_ops_rollup', { p_granularity:'month', p_category: category })
+    ];
+    // Meta and the category list only need fetching on the initial load.
+    if(!opts.categoryChangeOnly){
+      calls.push(rpc('get_ops_meta'), rpc('get_ops_categories'));
+    }
+    const results = await Promise.all(calls);
+    const weekRows = results[0], monthRows = results[1];
+
+    if(!opts.categoryChangeOnly){
+      META = results[2] || null;
+      HAS_COST = !!(META && META.has_cost_data);
+      ALL_CATEGORIES = (results[3] || [])
+        .map(c => c.product_category)
+        .filter(Boolean)
+        .sort((a,b) => a.localeCompare(b));
+    }
+
+    AGG.week  = rollupToStore(weekRows);
+    AGG.month = rollupToStore(monthRows);
+    ALL_PERIODS.week  = [...AGG.week.keys()].sort((a,b)=>a-b);
+    ALL_PERIODS.month = [...AGG.month.keys()].sort((a,b)=>a-b);
+
+    // Only refresh the fridge list on an unfiltered load — otherwise picking a category
+    // that a fridge does not stock would silently drop it out of the dropdown.
+    if(!opts.categoryChangeOnly){
+      const set = new Set();
+      for(const store of [AGG.week, AGG.month]){
+        for(const entry of store.values()){
+          for(const wh of entry.warehouses.keys()) if(wh !== '__ALL__') set.add(wh);
+        }
+      }
+      ALL_WAREHOUSES = [...set].sort((a,b)=>a.localeCompare(b));
+    }
+
+    DATA_SOURCE = 'supabase';
+    // A category filter returning nothing is a legitimate empty result, not a failure —
+    // only flag an empty database on the initial unfiltered load.
+    if(!opts.categoryChangeOnly && weekRows.length === 0 && monthRows.length === 0){
+      throw new Error('EMPTY_DB');
+    }
+  }
+
+  function supabaseStatusText(){
+    if(!META) return 'Supabase';
+    const n = (Number(META.move_count)||0) + (Number(META.sales_count)||0);
+    const when = META.refreshed_at ? new Date(META.refreshed_at) : null;
+    return 'Supabase · ' + new Intl.NumberFormat('en-BE').format(n) + ' rows'
+      + (when && !isNaN(when) ? ' · synced ' + when.toISOString().slice(0,16).replace('T',' ') : '');
+  }
+
+  async function bootFromSupabase(){
+    fileStatusText.textContent = 'Connecting to Supabase…';
+    document.getElementById('uploadHeading').textContent = 'Loading from Supabase…';
+    errorBox.style.display = 'none';
+    try{
+      await loadFromSupabase();
+      populateWarehouseSelect();
+      populateCategorySelect();
+      applyCostAvailability();
+      fileStatusText.textContent = supabaseStatusText();
+      reloadBtn.textContent = 'Refresh data';
+      reloadBtn.style.display = 'inline-block';
+      document.getElementById('exportBtn').style.display = 'inline-block';
+      uploadScreen.style.display = 'none';
+      dashboard.style.display = 'block';
+      renderAll();
+      return true;
+    }catch(err){
+      console.error(err);
+      fileStatusText.textContent = 'Not connected';
+      document.getElementById('uploadHeading').textContent = 'Database unavailable';
+      uploadScreen.style.display = 'flex';
+      dashboard.style.display = 'none';
+      showError(err.message === 'EMPTY_DB'
+        ? 'Connected to Supabase, but it holds no data yet — run the Odoo sync, or import an .xlsx below in the meantime.'
+        : 'Could not load from Supabase: ' + err.message + ' — you can still import an .xlsx below.');
+      return false;
+    }
+  }
+
+  function ensurePeriodWarehouse(store, pKey, pLabel, wh){
+    if(!store.has(pKey)) store.set(pKey, { label: pLabel, warehouses: new Map() });
+    const periodEntry = store.get(pKey);
+    if(!periodEntry.warehouses.has(wh)){
+      periodEntry.warehouses.set(wh, { revenue:0, units:0, cogsValue:0, scrap:0, scrapValue:0, adjPos:0, adjNeg:0, adjPosValue:0, adjNegValue:0, receiptQty:0, receiptValue:0 });
+    }
+    return periodEntry.warehouses.get(wh);
+  }
+
+  function buildAggregates(categoryFilter){
+    const week = new Map();
+    const month = new Map();
+
+    // Sales
+    for(const row of RAW.sales){
+      if(!matchesCategory(row.product_name)) continue;
+      const d = toDate(row.order_date);
+      if(!d) continue;
+      const wh = row.warehouse_name || '(No fridge)';
+      const revenue = Number(row.price_total) || 0;
+      const units = Number(row.qty_delivered) || 0;
+      const cogs = units * costFor(row.product_name);
+
+      const wK = weekKey(d), wL = weekLabel(d);
+      const mK = monthKey(d), mL = monthLabel(d);
+
+      const we = ensurePeriodWarehouse(week, wK, wL, wh);
+      we.revenue += revenue; we.units += units; we.cogsValue += cogs;
+      const wa = ensurePeriodWarehouse(week, wK, wL, '__ALL__');
+      wa.revenue += revenue; wa.units += units; wa.cogsValue += cogs;
+
+      const me = ensurePeriodWarehouse(month, mK, mL, wh);
+      me.revenue += revenue; me.units += units; me.cogsValue += cogs;
+      const ma = ensurePeriodWarehouse(month, mK, mL, '__ALL__');
+      ma.revenue += revenue; ma.units += units; ma.cogsValue += cogs;
+    }
+
+    // Stock moves: scrap + stock adjustments + receipts (goods delivered into fridges)
+    for(const row of RAW.moves){
+      if(!matchesCategory(row.product_name)) continue;
+      const d = toDate(row.date);
+      if(!d) continue;
+      const opType = row.operation_type;
+      if(opType !== 'Scrap' && opType !== 'Positive Stock Adjustment' && opType !== 'Negative Stock Adjustment' && opType !== 'Delivered to') continue;
+
+      const wh = row.warehouse || '(No fridge)';
+      const qty = Number(row.qty) || 0;
+      const value = qty * costFor(row.product_name);
+
+      const wK = weekKey(d), wL = weekLabel(d);
+      const mK = monthKey(d), mL = monthLabel(d);
+
+      const we = ensurePeriodWarehouse(week, wK, wL, wh);
+      const wa = ensurePeriodWarehouse(week, wK, wL, '__ALL__');
+      const me = ensurePeriodWarehouse(month, mK, mL, wh);
+      const ma = ensurePeriodWarehouse(month, mK, mL, '__ALL__');
+
+      if(opType === 'Scrap'){
+        we.scrap += qty; wa.scrap += qty; me.scrap += qty; ma.scrap += qty;
+        we.scrapValue += value; wa.scrapValue += value; me.scrapValue += value; ma.scrapValue += value;
+      }else if(opType === 'Positive Stock Adjustment'){
+        we.adjPos += qty; wa.adjPos += qty; me.adjPos += qty; ma.adjPos += qty;
+        we.adjPosValue += value; wa.adjPosValue += value; me.adjPosValue += value; ma.adjPosValue += value;
+      }else if(opType === 'Negative Stock Adjustment'){
+        we.adjNeg += qty; wa.adjNeg += qty; me.adjNeg += qty; ma.adjNeg += qty;
+        we.adjNegValue += value; wa.adjNegValue += value; me.adjNegValue += value; ma.adjNegValue += value;
+      }else if(opType === 'Delivered to'){
+        we.receiptQty += qty; wa.receiptQty += qty; me.receiptQty += qty; ma.receiptQty += qty;
+        we.receiptValue += value; wa.receiptValue += value; me.receiptValue += value; ma.receiptValue += value;
+      }
+    }
+
+    AGG.week = week;
+    AGG.month = month;
+    ALL_PERIODS.week = [...week.keys()].sort((a,b)=>a-b);
+    ALL_PERIODS.month = [...month.keys()].sort((a,b)=>a-b);
+  }
+
+  function populateWarehouseSelect(){
+    const sel = document.getElementById('warehouseSelect');
+    sel.innerHTML = '';
+    const optAll = document.createElement('option');
+    optAll.value = '__ALL__';
+    optAll.textContent = 'All fridges (total)';
+    sel.appendChild(optAll);
+    for(const wh of ALL_WAREHOUSES){
+      const opt = document.createElement('option');
+      opt.value = wh; opt.textContent = wh;
+      sel.appendChild(opt);
+    }
+    if(!sel.dataset.bound){
+      sel.dataset.bound = '1';
+      sel.addEventListener('change', renderAll);
+    }
+  }
+
+  function populateCategorySelect(){
+    const sel = document.getElementById('categorySelect');
+    sel.innerHTML = '';
+    const optAll = document.createElement('option');
+    optAll.value = '__ALL__';
+    optAll.textContent = 'All categories';
+    sel.appendChild(optAll);
+    for(const cat of ALL_CATEGORIES){
+      const opt = document.createElement('option');
+      opt.value = cat; opt.textContent = cat;
+      sel.appendChild(opt);
+    }
+    sel.style.display = ALL_CATEGORIES.length ? '' : 'none';
+    if(!sel.dataset.bound){
+      sel.dataset.bound = '1';
+      sel.addEventListener('change', async () => {
+        currentCategoryFilter = sel.value;
+        if(DATA_SOURCE === 'supabase'){
+          // Category is a server-side parameter, so this is a refetch rather than a
+          // client-side rebuild — keeps the payload at period × fridge grain.
+          sel.disabled = true;
+          const prev = fileStatusText.textContent;
+          fileStatusText.textContent = 'Filtering…';
+          try{
+            await loadFromSupabase({ categoryChangeOnly: true });
+            fileStatusText.textContent = supabaseStatusText();
+            renderAll();
+          }catch(err){
+            console.error(err);
+            fileStatusText.textContent = prev;
+            showError('Could not apply the category filter: ' + err.message);
+          }finally{
+            sel.disabled = false;
+          }
+        }else{
+          buildAggregates(currentCategoryFilter);
+          renderAll();
+        }
+      });
+    }
+  }
+
+  document.getElementById('granSeg').addEventListener('click', e=>{
+    const btn = e.target.closest('button');
+    if(!btn) return;
+    currentGran = btn.dataset.gran;
+    document.querySelectorAll('#granSeg button').forEach(b=>b.classList.toggle('active', b===btn));
+    renderAll();
+  });
+
+  document.getElementById('valueSeg').addEventListener('click', e=>{
+    const btn = e.target.closest('button');
+    if(!btn) return;
+    currentValueMode = btn.dataset.mode;
+    document.querySelectorAll('#valueSeg button').forEach(b=>b.classList.toggle('active', b===btn));
+    renderAll();
+  });
+
+  document.getElementById('scopeSelect').addEventListener('change', () => {
+    document.getElementById('customPeriodSelect').style.display =
+      document.getElementById('scopeSelect').value === 'custom' ? '' : 'none';
+    renderAll();
+  });
+  document.getElementById('customPeriodSelect').addEventListener('change', renderAll);
+  document.getElementById('excludeOngoing').addEventListener('change', renderAll);
+  document.getElementById('scrapTarget').addEventListener('input', renderAll);
+  document.getElementById('adjTarget').addEventListener('input', renderAll);
+  document.getElementById('exportBtn').addEventListener('click', () => window.print());
+
+  function fmtEUR(n){
+    return new Intl.NumberFormat('en-BE', { style:'currency', currency:'EUR', maximumFractionDigits:0 }).format(n);
+  }
+  function fmtNum(n){
+    return new Intl.NumberFormat('en-BE', { maximumFractionDigits:0 }).format(n);
+  }
+  function fmtPct(n){
+    return n.toFixed(1) + '%';
+  }
+
+  // ---- Is a given period (week or month) already fully over, or still ongoing? ----
+  // Consistent with weekKey/isoWeekInfo (UTC-based ISO weeks) and monthKey (local-time months).
+  function periodEndDate(pKey, gran){
+    const year = Math.floor(pKey/100);
+    const rest = pKey % 100;
+    if(gran === 'week'){
+      const jan4 = new Date(Date.UTC(year,0,4));
+      const jan4Dow = (jan4.getUTCDay()+6)%7; // Mon=0..Sun=6
+      const week1Monday = new Date(jan4);
+      week1Monday.setUTCDate(jan4.getUTCDate() - jan4Dow);
+      const sunday = new Date(week1Monday);
+      sunday.setUTCDate(week1Monday.getUTCDate() + (rest-1)*7 + 6);
+      sunday.setUTCHours(23,59,59,999);
+      return sunday;
+    }
+    return new Date(year, rest, 0, 23,59,59,999); // last day of the month, local time
+  }
+  function isPeriodComplete(pKey, gran){
+    return periodEndDate(pKey, gran).getTime() < Date.now();
+  }
+
+  // Drops the last period from the list if it's still in progress and the "exclude ongoing"
+  // toggle is checked — so "Latest period" etc. resolve to the last COMPLETE period by default.
+  function getEffectivePeriods(periods, gran){
+    if(!document.getElementById('excludeOngoing').checked) return periods;
+    if(periods.length && !isPeriodComplete(periods[periods.length-1], gran)) return periods.slice(0,-1);
+    return periods;
+  }
+
+  function populateCustomPeriodSelect(periods, store, gran){
+    const sel = document.getElementById('customPeriodSelect');
+    const prevVal = sel.value;
+    sel.innerHTML = '';
+    periods.slice().reverse().forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p;
+      opt.textContent = store.get(p).label + (isPeriodComplete(p, gran) ? '' : ' (in progress)');
+      sel.appendChild(opt);
+    });
+    if(prevVal && periods.includes(Number(prevVal))) sel.value = prevVal;
+  }
+
+  // ---- Scope: which periods count as "current" for KPIs/margin/anomalies/movers, and
+  // which equal-length window immediately before them is "previous" for WoW-style deltas.
+  // "periods" is the FULL list (so "Choose a specific period…" can target any period, including
+  // an in-progress one deliberately); "basePeriods" has the in-progress period already stripped
+  // out when the exclude-ongoing toggle is on, and is what the rolling-window options use. ----
+  function getScopePeriods(periods, basePeriods){
+    const raw = document.getElementById('scopeSelect').value;
+    if(raw === 'custom'){
+      const customKey = Number(document.getElementById('customPeriodSelect').value);
+      const idx = periods.indexOf(customKey);
+      if(idx === -1) return { scope: [], prev: [] };
+      return { scope: [periods[idx]], prev: idx>0 ? [periods[idx-1]] : [] };
+    }
+    if(raw === 'all') return { scope: basePeriods, prev: [] };
+    const n = Math.min(parseInt(raw, 10) || 1, basePeriods.length);
+    const scope = basePeriods.slice(-n);
+    const startIdx = basePeriods.length - scope.length;
+    const prev = basePeriods.slice(Math.max(0, startIdx - n), startIdx);
+    return { scope, prev };
+  }
+
+  function sumField(periodList, store, wh, field){
+    return periodList.reduce((a,p)=> a + ((store.get(p).warehouses.get(wh)||{})[field]||0), 0);
+  }
+
+  // Computes the same Revenue/Units/Scrap/Adjustments totals used by the KPI row, for any
+  // arbitrary set of periods — reused for the current scope, the previous scope (for deltas),
+  // sparklines, and per-fridge movers.
+  function computeKpiTotals(periodList, store, wh, mode, hasCost, percentBasis){
+    const useEur = mode === 'eur' && hasCost;
+    const usePercent = mode === 'percent';
+    const scrapValField = percentBasis === 'value' ? 'scrapValue' : 'scrap';
+    const adjPosValField = percentBasis === 'value' ? 'adjPosValue' : 'adjPos';
+    const adjNegValField = percentBasis === 'value' ? 'adjNegValue' : 'adjNeg';
+    const scrapField = useEur ? 'scrapValue' : 'scrap';
+    const adjPosField = useEur ? 'adjPosValue' : 'adjPos';
+    const adjNegField = useEur ? 'adjNegValue' : 'adjNeg';
+
+    const totRevenue = sumField(periodList, store, wh, 'revenue');
+    const totUnits = sumField(periodList, store, wh, 'units');
+
+    let totScrap, totAdjPos, totAdjNeg;
+    if(usePercent){
+      const totScrapRaw = sumField(periodList, store, wh, scrapValField);
+      const totAdjPosRaw = sumField(periodList, store, wh, adjPosValField);
+      const totAdjNegRaw = sumField(periodList, store, wh, adjNegValField);
+      const denomTotal = percentBasis === 'value' ? totRevenue : totUnits;
+      totScrap = denomTotal ? (totScrapRaw/denomTotal*100) : 0;
+      totAdjPos = denomTotal ? (totAdjPosRaw/denomTotal*100) : 0;
+      totAdjNeg = denomTotal ? (totAdjNegRaw/denomTotal*100) : 0;
+    }else{
+      totScrap = sumField(periodList, store, wh, scrapField);
+      totAdjPos = sumField(periodList, store, wh, adjPosField);
+      totAdjNeg = sumField(periodList, store, wh, adjNegField);
+    }
+    return { totRevenue, totUnits, totScrap, totAdjPos, totAdjNeg, netAdj: totAdjPos - totAdjNeg };
+  }
+
+  function scopeLabelText(scopePeriods, store){
+    if(!scopePeriods.length) return '—';
+    if(scopePeriods.length === 1) return store.get(scopePeriods[0]).label;
+    return store.get(scopePeriods[0]).label + ' → ' + store.get(scopePeriods[scopePeriods.length-1]).label;
+  }
+
+  // Small inline trend line inside a KPI card — last up to 12 periods, no axes/labels.
+  function renderSparkline(containerId, values, color){
+    const container = document.getElementById(containerId);
+    clearNode(container);
+    if(values.length < 2) return;
+    const width = container.clientWidth || 200;
+    const height = container.clientHeight || 34;
+    const minV = Math.min(0, ...values);
+    const maxV = Math.max(...values, minV + 1e-9);
+    const range = (maxV - minV) || 1;
+    const stepX = width / Math.max(values.length - 1, 1);
+    const pts = values.map((v,i) => [i*stepX, height - ((v-minV)/range)*height]);
+    const svg = svgEl('svg', { viewBox:`0 0 ${width} ${height}`, preserveAspectRatio:'none' });
+    svg.appendChild(svgEl('path', {
+      d: pts.map((p,i)=>(i===0?'M':'L')+p[0].toFixed(1)+','+p[1].toFixed(1)).join(' '),
+      fill:'none', stroke: color, 'stroke-width':1.6
+    }));
+    const last = pts[pts.length-1];
+    svg.appendChild(svgEl('circle', { cx:last[0].toFixed(1), cy:last[1].toFixed(1), r:2.6, fill: color }));
+    container.appendChild(svg);
+  }
+
+  // Renders the "▲ +12% vs previous period" line under a KPI value.
+  // goodIfUp=true means an increase is positive news (revenue, units); false means a decrease
+  // is the positive direction (scrap). Net adjustments: an increase (less loss) is good.
+  function renderKpiDelta(elId, curVal, prevVal, fmtFn, goodIfUp){
+    const el = document.getElementById(elId);
+    if(prevVal === null || prevVal === undefined){
+      el.textContent = 'No comparable previous period yet';
+      return;
+    }
+    const diff = curVal - prevVal;
+    const pctChange = prevVal !== 0 ? (diff/Math.abs(prevVal)*100) : null;
+    const isGood = goodIfUp ? diff >= 0 : diff <= 0;
+    const arrow = diff > 0 ? '▲' : (diff < 0 ? '▼' : '▬');
+    const cls = diff === 0 ? '' : (isGood ? 'pos' : 'neg');
+    const pctText = pctChange !== null ? ' (' + (pctChange>=0?'+':'') + pctChange.toFixed(1) + '%)' : '';
+    el.innerHTML = '<span class="'+cls+'"><span class="arrow">'+arrow+'</span>'+(diff>=0?'+':'−')+fmtFn(Math.abs(diff))+pctText+'</span> vs previous period';
+  }
+
+  let selectedTopPeriods = new Set();
+  let selectedTrendPeriods = new Set();
+
+  document.addEventListener('click', (e) => {
+    document.querySelectorAll('.period-picker.open').forEach(picker => {
+      if(!picker.contains(e.target)) picker.classList.remove('open');
+    });
+  });
+
+  // ---- Needs attention: flags fridges whose latest period looks off vs their own recent history ----
+  function computeAnomalies(periods, store, whScope, hasCost){
+    const flags = [];
+    if(periods.length < 2) return flags;
+    const lastP = periods[periods.length-1];
+    const priorP = periods.slice(Math.max(0, periods.length-9), periods.length-1);
+    if(!priorP.length) return flags;
+
+    const fridges = whScope === '__ALL__' ? ALL_WAREHOUSES : [whScope];
+    const scrapField = hasCost ? 'scrapValue' : 'scrap';
+    const adjNegField = hasCost ? 'adjNegValue' : 'adjNeg';
+    const adjPosField = hasCost ? 'adjPosValue' : 'adjPos';
+    const unitFmt = n => fmtNum(n) + ' u.';
+    const valFmt = hasCost ? fmtEUR : unitFmt;
+
+    fridges.forEach(wh => {
+      const lastVals = store.get(lastP).warehouses.get(wh);
+      if(!lastVals) return;
+      const priorVals = priorP.map(p => store.get(p).warehouses.get(wh)).filter(Boolean);
+      if(!priorVals.length) return;
+      const avg = field => priorVals.reduce((a,v)=>a+(v[field]||0),0) / priorVals.length;
+
+      const lastScrap = lastVals[scrapField] || 0;
+      const avgScrap = avg(scrapField);
+      const scrapFloor = hasCost ? 15 : 5;
+      if(avgScrap > 0 && lastScrap > avgScrap*1.6 && (lastScrap-avgScrap) > scrapFloor){
+        flags.push({ severity:'bad', text: wh + ': scrap ' + valFmt(lastScrap) + ' this period vs an average of ' + valFmt(avgScrap) + ' — up ' + Math.round((lastScrap/avgScrap-1)*100) + '%.' });
+      }
+
+      const lastRev = lastVals.revenue || 0;
+      const avgRev = avg('revenue');
+      if(avgRev > 0 && lastRev < avgRev*0.6){
+        flags.push({ severity:'bad', text: wh + ': revenue ' + fmtEUR(lastRev) + ' this period, down from an average of ' + fmtEUR(avgRev) + '.' });
+      }
+
+      const lastLoss = (lastVals[adjNegField]||0) - (lastVals[adjPosField]||0);
+      const avgLoss = avg(adjNegField) - avg(adjPosField);
+      const lossFloor = hasCost ? 15 : 5;
+      if(lastLoss > 0 && lastLoss > Math.max(avgLoss*1.6, avgLoss + lossFloor)){
+        flags.push({ severity:'warn', text: wh + ': net stock loss of ' + valFmt(lastLoss) + ' this period, above its recent average.' });
+      }
+    });
+
+    flags.sort((a,b) => (a.severity==='bad'?0:1) - (b.severity==='bad'?0:1));
+    return flags;
+  }
+
+  function renderAnomalies(flags, scopeText){
+    document.getElementById('anomalyScope').textContent = scopeText ? '(' + scopeText + ')' : '';
+    const container = document.getElementById('anomalyList');
+    clearNode(container);
+    if(!flags.length){
+      const p = document.createElement('div');
+      p.className = 'anomaly-empty';
+      p.textContent = 'Nothing unusual detected — all fridges are within their normal range for the latest period.';
+      container.appendChild(p);
+      return;
+    }
+    flags.slice(0,8).forEach(f => {
+      const row = document.createElement('div');
+      row.className = 'anomaly-item';
+      const dot = document.createElement('div');
+      dot.className = 'anomaly-dot ' + (f.severity==='bad' ? 'bad' : 'warn');
+      const text = document.createElement('div');
+      text.textContent = f.text;
+      row.appendChild(dot);
+      row.appendChild(text);
+      container.appendChild(row);
+    });
+  }
+
+  // ---- Fridges to watch: biggest revenue / scrap changes between the current and previous scope ----
+  function computeMovers(scopePeriods, prevPeriods, store, hasCost){
+    if(!prevPeriods.length) return { revenue: [], scrap: [] };
+    const scrapField = hasCost ? 'scrapValue' : 'scrap';
+    const revItems = [], scrapItems = [];
+    ALL_WAREHOUSES.forEach(wh => {
+      const curRev = sumField(scopePeriods, store, wh, 'revenue');
+      const prevRev = sumField(prevPeriods, store, wh, 'revenue');
+      if(curRev || prevRev) revItems.push({ wh, delta: curRev-prevRev });
+
+      const curScrap = sumField(scopePeriods, store, wh, scrapField);
+      const prevScrap = sumField(prevPeriods, store, wh, scrapField);
+      if(curScrap || prevScrap) scrapItems.push({ wh, delta: curScrap-prevScrap });
+    });
+    revItems.sort((a,b)=>Math.abs(b.delta)-Math.abs(a.delta));
+    scrapItems.sort((a,b)=>Math.abs(b.delta)-Math.abs(a.delta));
+    return { revenue: revItems.slice(0,8), scrap: scrapItems.slice(0,8) };
+  }
+
+  function renderMoversList(containerId, items, fmtFn, goodIfUp){
+    const container = document.getElementById(containerId);
+    clearNode(container);
+    if(!items.length){
+      const d = document.createElement('div');
+      d.className = 'movers-empty';
+      d.textContent = 'Not enough history yet — need at least two comparable periods.';
+      container.appendChild(d);
+      return;
+    }
+    items.forEach(it => {
+      const row = document.createElement('div');
+      row.className = 'movers-row';
+      const name = document.createElement('div');
+      name.className = 'm-name';
+      name.textContent = it.wh;
+      name.title = it.wh;
+      const delta = document.createElement('div');
+      const isGood = it.delta === 0 ? null : (goodIfUp ? it.delta >= 0 : it.delta <= 0);
+      delta.className = 'm-delta' + (isGood===null ? '' : (isGood ? ' pos' : ' neg'));
+      const arrow = it.delta > 0 ? '▲' : (it.delta < 0 ? '▼' : '▬');
+      delta.textContent = arrow + ' ' + (it.delta>=0?'+':'') + fmtFn(it.delta);
+      row.appendChild(name);
+      row.appendChild(delta);
+      container.appendChild(row);
+    });
+  }
+
+  function renderInsightBanner(cur, prev, flags, scopeText){
+    const banner = document.getElementById('insightBanner');
+    if(!prev){
+      banner.classList.remove('show');
+      return;
+    }
+    const revDelta = prev.totRevenue ? ((cur.totRevenue-prev.totRevenue)/Math.abs(prev.totRevenue)*100) : null;
+    const scrapUp = cur.totScrap > prev.totScrap;
+    const parts = [];
+    parts.push('<b>' + scopeText + '</b>: Revenue ' + fmtEUR(cur.totRevenue) +
+      (revDelta!==null ? (revDelta>=0 ? ', up ' : ', down ') + Math.abs(revDelta).toFixed(1) + '% vs previous period' : '') + '.');
+    parts.push((scrapUp ? 'Scrap increased' : 'Scrap decreased') + ' vs the previous period.');
+    parts.push(flags.length ? (flags.length + ' fridge(s) flagged for review below.') : 'No fridges flagged for review this period.');
+    banner.innerHTML = parts.join(' ');
+    banner.classList.add('show');
+  }
+
+  function renderAll(){
+    const gran = currentGran;
+    const store = AGG[gran];
+    const periods = ALL_PERIODS[gran];
+    const selectedWh = document.getElementById('warehouseSelect').value || '__ALL__';
+
+    document.getElementById('rangeLabel').textContent =
+      periods.length ? (store.get(periods[0]).label + ' → ' + store.get(periods[periods.length-1]).label) : '';
+
+    const hasCost = HAS_COST;
+    const mode = currentValueMode; // 'units' | 'eur' | 'percent'
+    const useEur = mode === 'eur' && hasCost;
+    const usePercent = mode === 'percent';
+    // Percent basis: relative to revenue (€) when cost data is available, otherwise relative to units sold.
+    const percentBasis = hasCost ? 'value' : 'units';
+
+    const labels = periods.map(p => store.get(p).label);
+    const revSeries = periods.map(p => (store.get(p).warehouses.get(selectedWh) || {}).revenue || 0);
+    const unitsSeries = periods.map(p => (store.get(p).warehouses.get(selectedWh) || {}).units || 0);
+
+    // ---- Trend charts for Scrap and Stock Adjustments are ALWAYS shown as % of sales ----
+    const denomSeries = percentBasis === 'value' ? revSeries : unitsSeries;
+    const scrapValField = percentBasis === 'value' ? 'scrapValue' : 'scrap';
+    const adjPosValField = percentBasis === 'value' ? 'adjPosValue' : 'adjPos';
+    const adjNegValField = percentBasis === 'value' ? 'adjNegValue' : 'adjNeg';
+
+    const scrapPctSeries = periods.map((p,i) => {
+      const v = (store.get(p).warehouses.get(selectedWh) || {})[scrapValField] || 0;
+      return denomSeries[i] ? (v/denomSeries[i]*100) : 0;
+    });
+    const adjNetPctSeries = periods.map((p,i) => {
+      const vals = store.get(p).warehouses.get(selectedWh) || {};
+      const net = (vals[adjPosValField]||0) - (vals[adjNegValField]||0);
+      return denomSeries[i] ? (net/denomSeries[i]*100) : 0;
+    });
+
+    // ---- Trend charts (Revenue / Scrap% / Adj%) only show the periods picked in the trend
+    // period picker, so the x-axis stays readable as more weeks/months accumulate over time.
+    // KPI totals and margin above are unaffected — they always use the FULL period range.
+    populateTrendPeriodPicker(periods, store);
+    const trendPeriods = periods.filter(p => selectedTrendPeriods.has(p));
+    const trendLabels = trendPeriods.map(p => store.get(p).label);
+    const trendRevSeries = trendPeriods.map(p => (store.get(p).warehouses.get(selectedWh) || {}).revenue || 0);
+    const trendUnitsSeries = trendPeriods.map(p => (store.get(p).warehouses.get(selectedWh) || {}).units || 0);
+    const trendDenomSeries = percentBasis === 'value' ? trendRevSeries : trendUnitsSeries;
+    const trendScrapPctSeries = trendPeriods.map((p,i) => {
+      const v = (store.get(p).warehouses.get(selectedWh) || {})[scrapValField] || 0;
+      return trendDenomSeries[i] ? (v/trendDenomSeries[i]*100) : 0;
+    });
+    const trendAdjNetPctSeries = trendPeriods.map((p,i) => {
+      const vals = store.get(p).warehouses.get(selectedWh) || {};
+      const net = (vals[adjPosValField]||0) - (vals[adjNegValField]||0);
+      return trendDenomSeries[i] ? (net/trendDenomSeries[i]*100) : 0;
+    });
+
+    // ---- Ongoing period detection: if the last period in the file isn't over yet (e.g. it's
+    // Wednesday and we're looking at the current week), exclude it from WoW-style comparisons
+    // by default, so "Latest period" resolves to the last COMPLETE period rather than a
+    // partial one that would look artificially low. Also lets the user pick ANY specific
+    // period directly via "Choose a specific period…", bypassing the rolling-window options. ----
+    populateCustomPeriodSelect(periods, store, gran);
+    document.getElementById('customPeriodSelect').style.display =
+      document.getElementById('scopeSelect').value === 'custom' ? '' : 'none';
+
+    const basePeriods = getEffectivePeriods(periods, gran);
+    const lastPeriod = periods[periods.length-1];
+    const ongoingNotice = document.getElementById('ongoingNotice');
+    if(lastPeriod !== undefined && !isPeriodComplete(lastPeriod, gran)){
+      ongoingNotice.style.display = '';
+      ongoingNotice.textContent = '⏳ ' + store.get(lastPeriod).label + ' is still in progress (data only through today), so its numbers will look lower than a full period. ' +
+        (document.getElementById('excludeOngoing').checked
+          ? 'It is excluded from the KPI, margin, anomaly and "fridges to watch" comparisons below — the trend charts and "Top fridges" still include it for context.'
+          : 'It is currently INCLUDED in the comparisons below — uncheck the box above to exclude it.');
+    }else{
+      ongoingNotice.style.display = 'none';
+    }
+
+    // ---- Scope: which periods are "current" for KPIs/margin/anomalies/movers, and the
+    // equal-length window right before them, used for WoW-style deltas ----
+    const { scope: scopePeriods, prev: prevPeriods } = getScopePeriods(periods, basePeriods);
+    const scopeText = scopeLabelText(scopePeriods, store);
+
+    // ---- KPI values follow the Units / € / % toggle ----
+    const cur = computeKpiTotals(scopePeriods, store, selectedWh, mode, hasCost, percentBasis);
+    const prevTotals = prevPeriods.length ? computeKpiTotals(prevPeriods, store, selectedWh, mode, hasCost, percentBasis) : null;
+    const fmt = usePercent ? fmtPct : (useEur ? fmtEUR : (n => fmtNum(n) + ' u.'));
+
+    document.getElementById('kpiRevenue').textContent = fmtEUR(cur.totRevenue);
+    document.getElementById('kpiRevenueSub').textContent = fmtNum(cur.totUnits) + ' units sold';
+    document.getElementById('kpiUnits').textContent = fmtNum(cur.totUnits);
+    document.getElementById('kpiUnitsSub').textContent = scopeText;
+    document.getElementById('kpiScrap').textContent = fmt(cur.totScrap);
+    const scrapUnitsTotal = sumField(scopePeriods, store, selectedWh, 'scrap');
+    document.getElementById('kpiScrapSub').textContent = usePercent
+      ? ('vs ' + (percentBasis==='value' ? 'revenue' : 'units sold') + ' — ' + fmtNum(scrapUnitsTotal) + ' u.')
+      : (useEur ? (fmtNum(scrapUnitsTotal) + ' units') : (cur.totUnits ? ((cur.totScrap/(cur.totUnits+cur.totScrap)*100).toFixed(1) + '% of total flow') : '—'));
+    document.getElementById('kpiAdj').innerHTML =
+      '<span class="' + (cur.netAdj>=0?'pos':'neg') + '">' + (cur.netAdj>=0?'+':'') + fmt(cur.netAdj) + '</span>';
+    document.getElementById('kpiAdjSub').textContent = '+' + fmt(cur.totAdjPos) + ' / -' + fmt(cur.totAdjNeg);
+
+    renderKpiDelta('kpiRevenueDelta', cur.totRevenue, prevTotals && prevTotals.totRevenue, fmtEUR, true);
+    renderKpiDelta('kpiUnitsDelta', cur.totUnits, prevTotals && prevTotals.totUnits, n => fmtNum(n) + ' u.', true);
+    renderKpiDelta('kpiScrapDelta', cur.totScrap, prevTotals && prevTotals.totScrap, fmt, false);
+    renderKpiDelta('kpiAdjDelta', cur.netAdj, prevTotals && prevTotals.netAdj, fmt, true);
+
+    // ---- Sparklines: last up to 12 COMPLETE periods (same ongoing-exclusion as the scope
+    // above), just to give quick "is this a blip or a trend" context inside each KPI card ----
+    const sparkPeriods = basePeriods.slice(-12);
+    const sparkTotals = sparkPeriods.map(p => computeKpiTotals([p], store, selectedWh, mode, hasCost, percentBasis));
+    renderSparkline('sparkRevenue', sparkTotals.map(t=>t.totRevenue), getVar('--teal'));
+    renderSparkline('sparkUnits', sparkTotals.map(t=>t.totUnits), getVar('--teal-dark'));
+    renderSparkline('sparkScrap', sparkTotals.map(t=>t.totScrap), getVar('--amber'));
+    renderSparkline('sparkAdj', sparkTotals.map(t=>t.netAdj), getVar('--rose'));
+
+    // ---- Margin breakdown: Revenue - COGS (cost of units actually sold) - scrap - net stock adjustment loss ----
+    // COGS is computed from sales lines (qty_delivered × product cost), NOT from "Delivered to" receipts,
+    // to avoid double-counting: a scrapped/adjusted unit was also received at some point, so counting both
+    // "goods received" and "scrap"/"adjustment" for the same unit would deduct its cost twice.
+    // Always scoped to the same current-period selection as the KPI row above.
+    if(hasCost){
+      const totCogs = sumField(scopePeriods, store, selectedWh, 'cogsValue');
+      const totScrapValueAbs = sumField(scopePeriods, store, selectedWh, 'scrapValue');
+      const totAdjPosValueAbs = sumField(scopePeriods, store, selectedWh, 'adjPosValue');
+      const totAdjNegValueAbs = sumField(scopePeriods, store, selectedWh, 'adjNegValue');
+      const netAdjLoss = totAdjNegValueAbs - totAdjPosValueAbs; // positive = net loss, negative = net gain (found stock)
+      const marginRevenueTotal = sumField(scopePeriods, store, selectedWh, 'revenue');
+      const margin = marginRevenueTotal - totCogs - totScrapValueAbs - netAdjLoss;
+
+      document.getElementById('marginRevenue').textContent = fmtEUR(marginRevenueTotal);
+      document.getElementById('marginReceipts').textContent = '− ' + fmtEUR(totCogs);
+      document.getElementById('marginScrap').textContent = '− ' + fmtEUR(totScrapValueAbs);
+      document.getElementById('marginAdj').innerHTML = (netAdjLoss>=0 ? '− ' : '+ ') + fmtEUR(Math.abs(netAdjLoss));
+      const marginEl = document.getElementById('marginTotal');
+      marginEl.textContent = (margin>=0?'':'−') + fmtEUR(Math.abs(margin));
+      marginEl.className = margin>=0 ? 'pos' : 'neg';
+      document.getElementById('marginNote').textContent =
+        'COGS = product cost × units actually sold (qty_delivered), kept separate from scrap and stock-adjustment costs so a lost/adjusted unit is never deducted twice. Scrap and adjustment costs are valued at product cost × quantity scrapped/adjusted.';
+    }else{
+      ['marginRevenue','marginReceipts','marginScrap','marginAdj','marginTotal'].forEach(id => {
+        document.getElementById(id).textContent = '—';
+      });
+      document.getElementById('marginTotal').className = '';
+      document.getElementById('marginNote').textContent = 'Upload the Products sheet (with cost data) to see the margin breakdown.';
+    }
+    document.getElementById('marginScope').textContent =
+      '(' + (selectedWh === '__ALL__' ? 'all fridges' : selectedWh) + ' · ' + scopeText + ')';
+
+    // ---- Trend charts: reference target lines (editable, default 5% scrap / -2% net adjustment) ----
+    const scrapTargetVal = parseFloat(document.getElementById('scrapTarget').value);
+    const adjTargetVal = parseFloat(document.getElementById('adjTarget').value);
+
+    drawLineBar('chartRevenue', trendLabels, [{ label:'Revenue (€)', data: trendRevSeries, color: getVar('--teal') }],
+      { yFormat: v => fmtEUR(v), tooltipFormat: v => fmtEUR(v) });
+
+    drawLineBar('chartScrap', trendLabels, [{ label:'Scrap (% of sales)', data: trendScrapPctSeries, color: getVar('--amber') }],
+      { yFormat: v => fmtPct(v), tooltipFormat: v => fmtPct(v),
+        threshold: isNaN(scrapTargetVal) ? null : scrapTargetVal, thresholdFormat: v => fmtPct(v) });
+
+    drawLineBar('chartAdj', trendLabels, [{ label:'Net adjustment (% of sales)', data: trendAdjNetPctSeries, color: getVar('--teal-dark') }],
+      { yFormat: v => fmtPct(v), tooltipFormat: v => fmtPct(v),
+        threshold: isNaN(adjTargetVal) ? null : adjTargetVal, thresholdFormat: v => fmtPct(v) });
+
+    populateTopPeriodPicker(periods, store);
+    drawTopWarehouses(periods, store);
+
+    // ---- Needs attention: auto-flag fridges whose latest period looks unusual vs their
+    // own recent history (always evaluated on the full period range, not the scope filter) ----
+    const flags = computeAnomalies(basePeriods, store, selectedWh, hasCost);
+    renderAnomalies(flags, scopeText);
+
+    // ---- Fridges to watch: biggest revenue / scrap changes between the current scope and
+    // the equivalent previous window — replaces the old fridge × period matrix/list, which
+    // was rarely actionable on its own. Always in € (cost) for scrap when available. ----
+    document.getElementById('moversScope').textContent = prevPeriods.length
+      ? '(' + scopeText + ' vs previous ' + scopePeriods.length + ' period(s))'
+      : '(not enough history to compare yet)';
+    const movers = computeMovers(scopePeriods, prevPeriods, store, hasCost);
+    renderMoversList('moversRevenue', movers.revenue, fmtEUR, true);
+    renderMoversList('moversScrap', movers.scrap, hasCost ? fmtEUR : (n => fmtNum(n) + ' u.'), false);
+
+    // ---- Quick-read summary banner ----
+    renderInsightBanner(cur, prevTotals, flags, scopeText);
+  }
+
+  function getVar(name){
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+
+  function svgEl(tag, attrs){
+    const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+    for(const k in attrs) el.setAttribute(k, attrs[k]);
+    return el;
+  }
+  function clearNode(node){ while(node.firstChild) node.removeChild(node.firstChild); }
+
+  // Generic bar/line chart renderer (no external dependency). datasets: [{label,data,color}]
+  function renderChart(containerId, labels, datasets, opts){
+    opts = opts || {};
+    const container = document.getElementById(containerId);
+    clearNode(container);
+    const width = container.clientWidth || 560;
+    const height = container.clientHeight || 240;
+    const n = labels.length;
+    const showValueLabels = !!opts.valueLabels && n <= 26;
+    const paddingLeft = 54, paddingRight = 14, paddingTop = showValueLabels ? 26 : 12, paddingBottom = labels.length ? 30 : 12;
+    const innerW = Math.max(10, width - paddingLeft - paddingRight);
+    const innerH = Math.max(10, height - paddingTop - paddingBottom);
+
+    const thresholdVal = (opts.threshold !== undefined && opts.threshold !== null && !isNaN(opts.threshold)) ? Number(opts.threshold) : null;
+    const allValues = datasets.reduce((acc,d)=>acc.concat(d.data), []);
+    if(thresholdVal !== null) allValues.push(thresholdVal);
+    let minV = Math.min(0, ...allValues);
+    let maxV = Math.max(0, ...allValues, 1e-9);
+    if(minV === maxV) maxV = minV + 1;
+    const range = maxV - minV;
+
+    const svg = svgEl('svg', { viewBox: `0 0 ${width} ${height}`, preserveAspectRatio:'none' });
+
+    const ticks = 4;
+    for(let i=0;i<=ticks;i++){
+      const v = minV + range*i/ticks;
+      const y = paddingTop + innerH*(1 - (v-minV)/range);
+      svg.appendChild(svgEl('line', { x1:paddingLeft, x2:width-paddingRight, y1:y, y2:y, stroke:'#EEF2F3', 'stroke-width':1 }));
+      const text = svgEl('text', { x:paddingLeft-8, y:y+3, 'text-anchor':'end', 'font-size':9.5, 'font-family':'IBM Plex Mono, monospace', fill:'#5B6B72' });
+      text.textContent = opts.yFormat ? opts.yFormat(v) : Math.round(v);
+      svg.appendChild(text);
+    }
+
+    const slotW = innerW / Math.max(n, 1);
+    const zeroY = paddingTop + innerH*(1 - (0-minV)/range);
+    const asLine = opts.type === 'line' || (opts.type === undefined && labels.length > 20);
+    const grouped = !!opts.grouped;
+    const groupCount = datasets.length;
+
+    datasets.forEach((ds, dsIndex) => {
+      if(asLine){
+        const points = labels.map((lab,i) => {
+          const x = paddingLeft + slotW*(i+0.5);
+          const v = ds.data[i] || 0;
+          const y = paddingTop + innerH*(1 - (v-minV)/range);
+          return [x,y];
+        });
+        const path = svgEl('path', {
+          d: points.map((p,i)=> (i===0?'M':'L')+p[0].toFixed(1)+','+p[1].toFixed(1)).join(' '),
+          fill:'none', stroke: ds.color, 'stroke-width':2
+        });
+        svg.appendChild(path);
+        if(n <= 60){
+          points.forEach((p,i) => {
+            const c = svgEl('circle', { cx:p[0], cy:p[1], r:2.4, fill: ds.color });
+            const title = svgEl('title', {});
+            title.textContent = labels[i] + ': ' + (opts.tooltipFormat ? opts.tooltipFormat(ds.data[i]) : ds.data[i]);
+            c.appendChild(title);
+            svg.appendChild(c);
+          });
+        }
+        if(showValueLabels){
+          points.forEach((p,i) => {
+            const labelText = opts.tooltipFormat ? opts.tooltipFormat(ds.data[i]) : String(ds.data[i]);
+            const ty = Math.max(p[1]-8, paddingTop+9);
+            const t = svgEl('text', { x:p[0].toFixed(1), y:ty.toFixed(1), 'text-anchor':'middle', 'font-size':9.5, 'font-family':'IBM Plex Mono, monospace', fill:'#152227' });
+            t.textContent = labelText;
+            svg.appendChild(t);
+          });
+        }
+      } else {
+        const barWidth = Math.max(2, (slotW*0.68) / (grouped ? groupCount : 1));
+        labels.forEach((lab,i) => {
+          const v = ds.data[i] || 0;
+          const yTop = paddingTop + innerH*(1 - (Math.max(v,0)-minV)/range);
+          const yBase = v >= 0 ? yTop : zeroY;
+          const barH = Math.max(Math.abs(zeroY - (paddingTop + innerH*(1-(v-minV)/range))), 0.5);
+          let x;
+          if(grouped){
+            x = paddingLeft + slotW*i + (slotW - barWidth*groupCount)/2 + dsIndex*barWidth;
+          }else{
+            x = paddingLeft + slotW*i + (slotW - barWidth)/2;
+          }
+          const rect = svgEl('rect', { x:x.toFixed(1), y:yBase.toFixed(1), width:barWidth.toFixed(1), height:barH.toFixed(1), rx:2, fill: ds.color });
+          const title = svgEl('title', {});
+          title.textContent = labels[i] + (ds.label ? ' — ' + ds.label : '') + ': ' + (opts.tooltipFormat ? opts.tooltipFormat(v) : v);
+          rect.appendChild(title);
+          svg.appendChild(rect);
+          if(showValueLabels && barWidth >= 16){
+            const labelText = opts.tooltipFormat ? opts.tooltipFormat(v) : String(v);
+            const ty = v >= 0 ? Math.max(yTop-5, paddingTop+9) : (yBase + barH + 11);
+            const t = svgEl('text', { x:(x+barWidth/2).toFixed(1), y:ty.toFixed(1), 'text-anchor':'middle', 'font-size':9.5, 'font-family':'IBM Plex Mono, monospace', fill:'#152227' });
+            t.textContent = labelText;
+            svg.appendChild(t);
+          }
+        });
+      }
+    });
+
+    if(minV < 0){
+      svg.appendChild(svgEl('line', { x1:paddingLeft, x2:width-paddingRight, y1:zeroY, y2:zeroY, stroke:'#C7D2D4', 'stroke-width':1 }));
+    }
+
+    if(thresholdVal !== null){
+      const ty = paddingTop + innerH*(1 - (thresholdVal-minV)/range);
+      svg.appendChild(svgEl('line', { x1:paddingLeft, x2:width-paddingRight, y1:ty.toFixed(1), y2:ty.toFixed(1), stroke:'#9AA5A8', 'stroke-width':1.4, 'stroke-dasharray':'5,4' }));
+      const tLabel = svgEl('text', { x:width-paddingRight, y:(ty-4).toFixed(1), 'text-anchor':'end', 'font-size':9, 'font-family':'IBM Plex Mono, monospace', fill:'#7C8A8F' });
+      tLabel.textContent = 'Target ' + (opts.thresholdFormat ? opts.thresholdFormat(thresholdVal) : thresholdVal);
+      svg.appendChild(tLabel);
+    }
+
+    if(labels.length){
+      // Pick evenly-spaced labels respecting a minimum pixel gap, while always keeping the
+      // last one legible (rather than force-including it even when it collides with its neighbor).
+      const minGap = 46;
+      const positions = labels.map((lab,i) => paddingLeft + slotW*(i+0.5));
+      const shown = [];
+      let lastX = -Infinity;
+      for(let i=0;i<labels.length;i++){
+        if(positions[i] - lastX >= minGap){ shown.push(i); lastX = positions[i]; }
+      }
+      const lastIdx = labels.length-1;
+      if(shown[shown.length-1] !== lastIdx){
+        while(shown.length && (positions[lastIdx] - positions[shown[shown.length-1]]) < minGap){ shown.pop(); }
+        shown.push(lastIdx);
+      }
+      shown.forEach(i => {
+        const text = svgEl('text', { x:positions[i], y:height-8, 'text-anchor':'middle', 'font-size':9, 'font-family':'IBM Plex Mono, monospace', fill:'#5B6B72' });
+        text.textContent = labels[i];
+        svg.appendChild(text);
+      });
+    }
+
+    if(opts.legend){
+      let lx = paddingLeft;
+      datasets.forEach(ds => {
+        svg.appendChild(svgEl('rect', { x:lx, y:2, width:9, height:9, rx:2, fill: ds.color }));
+        const t = svgEl('text', { x:lx+13, y:11, 'font-size':10, 'font-family':'Inter, sans-serif', fill:'#5B6B72' });
+        t.textContent = ds.label;
+        svg.appendChild(t);
+        lx += 13 + (ds.label.length*5.5) + 16;
+      });
+    }
+
+    container.appendChild(svg);
+  }
+
+  // Horizontal bar list (top fridges)
+  function renderHBarChart(containerId, items, opts){
+    opts = opts || {};
+    const container = document.getElementById(containerId);
+    clearNode(container);
+    const width = container.clientWidth || 560;
+    const rowH = 22;
+    const height = Math.max(items.length*rowH + 16, container.clientHeight || 300);
+    const paddingLeft = 170, paddingRight = 70, paddingTop = 8;
+    const innerW = Math.max(10, width - paddingLeft - paddingRight);
+    const maxV = Math.max(1, ...items.map(it => it.value));
+
+    const svg = svgEl('svg', { viewBox:`0 0 ${width} ${height}` });
+    items.forEach((it,i) => {
+      const y = paddingTop + i*rowH;
+      const barW = innerW * (it.value/maxV);
+      const rect = svgEl('rect', { x:paddingLeft, y:y+3, width:Math.max(barW,1).toFixed(1), height:rowH-8, rx:3, fill: opts.color || '#0E7C86' });
+      const title = svgEl('title', {});
+      title.textContent = it.label + ': ' + (opts.format ? opts.format(it.value) : it.value);
+      rect.appendChild(title);
+      svg.appendChild(rect);
+
+      const label = svgEl('text', { x:paddingLeft-8, y:y+rowH/2+4, 'text-anchor':'end', 'font-size':11, 'font-family':'Inter, sans-serif', fill:'#152227' });
+      label.textContent = it.label.length > 24 ? it.label.slice(0,22)+'…' : it.label;
+      svg.appendChild(label);
+
+      const valText = svgEl('text', { x:paddingLeft+barW+6, y:y+rowH/2+4, 'font-size':10, 'font-family':'IBM Plex Mono, monospace', fill:'#5B6B72' });
+      valText.textContent = opts.format ? opts.format(it.value) : it.value;
+      svg.appendChild(valText);
+    });
+    container.appendChild(svg);
+    container.parentElement.style.height = height + 'px';
+  }
+
+  function drawLineBar(id, labels, series, fmtOpts){
+    renderChart(id, labels, series.map(s => ({ label:s.label, data:s.data, color:s.color })),
+      Object.assign({ type: labels.length > 20 ? 'line' : 'bar', valueLabels: true }, fmtOpts || {}));
+  }
+
+  function ensurePeriodSelection(selectedSet, periods, defaultFn){
+    const currentKeys = new Set(periods);
+    const staleOrEmpty = selectedSet.size === 0 || [...selectedSet].some(k => !currentKeys.has(k));
+    if(staleOrEmpty){
+      const def = defaultFn(periods);
+      selectedSet.clear();
+      def.forEach(p => selectedSet.add(p));
+    }
+  }
+
+  function buildPeriodPickerUI(containerId, periods, store, selectedSet, opts){
+    opts = opts || {};
+    const container = document.getElementById(containerId);
+    const wasOpen = container.classList.contains('open');
+    clearNode(container);
+    container.className = 'period-picker' + (wasOpen ? ' open' : '');
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'period-picker-btn';
+    if(selectedSet.size === periods.length){
+      btn.textContent = opts.allLabel || 'All periods';
+    }else if(selectedSet.size === 0){
+      btn.textContent = 'No period selected';
+    }else if(selectedSet.size === 1){
+      btn.textContent = store.get([...selectedSet][0]).label;
+    }else{
+      btn.textContent = selectedSet.size + ' periods selected';
+    }
+    btn.addEventListener('click', e => { e.stopPropagation(); container.classList.toggle('open'); });
+    container.appendChild(btn);
+
+    const panel = document.createElement('div');
+    panel.className = 'period-picker-panel';
+
+    const actions = document.createElement('div');
+    actions.className = 'period-picker-actions';
+    const selectAllBtn = document.createElement('button');
+    selectAllBtn.type = 'button';
+    selectAllBtn.textContent = 'Select all';
+    selectAllBtn.addEventListener('click', e => { e.stopPropagation(); periods.forEach(p=>selectedSet.add(p)); renderAll(); });
+    actions.appendChild(selectAllBtn);
+    const clearBtn = document.createElement('button');
+    clearBtn.type = 'button';
+    clearBtn.textContent = 'Clear';
+    clearBtn.addEventListener('click', e => { e.stopPropagation(); selectedSet.clear(); renderAll(); });
+    actions.appendChild(clearBtn);
+    if(opts.presets){
+      opts.presets.forEach(preset => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = preset.label;
+        b.addEventListener('click', e => {
+          e.stopPropagation();
+          selectedSet.clear();
+          periods.slice(-preset.count).forEach(p => selectedSet.add(p));
+          renderAll();
+        });
+        actions.appendChild(b);
+      });
+    }
+    panel.appendChild(actions);
+
+    periods.forEach(p => {
+      const label = document.createElement('label');
+      label.className = 'period-picker-option';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = selectedSet.has(p);
+      cb.addEventListener('change', () => {
+        if(cb.checked) selectedSet.add(p); else selectedSet.delete(p);
+        renderAll();
+      });
+      const span = document.createElement('span');
+      span.textContent = store.get(p).label + ((p === periods[periods.length-1] && !isPeriodComplete(p, currentGran)) ? ' (in progress)' : '');
+      label.appendChild(cb);
+      label.appendChild(span);
+      panel.appendChild(label);
+    });
+
+    container.appendChild(panel);
+  }
+
+  function populateTopPeriodPicker(periods, store){
+    ensurePeriodSelection(selectedTopPeriods, periods, ps => ps); // default: all periods selected (total)
+    buildPeriodPickerUI('topPeriodPicker', periods, store, selectedTopPeriods, { allLabel: 'All periods (total)' });
+  }
+
+  function populateTrendPeriodPicker(periods, store){
+    // Default: most recent 12 periods, to keep the axis readable as more weeks/months pile up.
+    ensurePeriodSelection(selectedTrendPeriods, periods, ps => ps.slice(-Math.min(12, ps.length)));
+    buildPeriodPickerUI('trendPeriodPicker', periods, store, selectedTrendPeriods, {
+      allLabel: 'All periods',
+      presets: [
+        { label:'Last 8', count:8 },
+        { label:'Last 13', count:13 },
+        { label:'Last 26', count:26 }
+      ]
+    });
+  }
+
+  function drawTopWarehouses(periods, store){
+    const activePeriods = periods.filter(p => selectedTopPeriods.has(p));
+    const totals = new Map();
+    for(const p of activePeriods){
+      const entry = store.get(p);
+      for(const [wh, vals] of entry.warehouses){
+        if(wh === '__ALL__') continue;
+        totals.set(wh, (totals.get(wh)||0) + vals.revenue);
+      }
+    }
+    const sorted = [...totals.entries()].sort((a,b)=>b[1]-a[1]).slice(0,15)
+      .map(([label,value]) => ({ label, value }));
+    renderHBarChart('chartTopWarehouses', sorted, { color:getVar('--teal'), format: v => fmtEUR(v) });
+  }
+
+  // ---------- Auth gate ----------
+  const loginScreen = document.getElementById('loginScreen');
+  const loginForm = document.getElementById('loginForm');
+  const loginError = document.getElementById('loginError');
+  const signOutBtn = document.getElementById('signOutBtn');
+
+  function showLogin(){
+    loginScreen.style.display = 'flex';
+    uploadScreen.style.display = 'none';
+    dashboard.style.display = 'none';
+    signOutBtn.style.display = 'none';
+    reloadBtn.style.display = 'none';
+    document.getElementById('exportBtn').style.display = 'none';
+    fileStatusText.textContent = 'Signed out';
+  }
+
+  function enterApp(session){
+    loginScreen.style.display = 'none';
+    uploadScreen.style.display = 'flex';
+    signOutBtn.style.display = 'inline-block';
+    fileStatusText.textContent = session.user.email;
+    bootFromSupabase();
+  }
+
+  loginForm.addEventListener('submit', async e => {
+    e.preventDefault();
+    loginError.style.display = 'none';
+    const btn = document.getElementById('loginSubmit');
+    btn.disabled = true; btn.textContent = 'Signing in…';
+    const { data, error } = await sbAuth.auth.signInWithPassword({
+      email: document.getElementById('loginEmail').value.trim(),
+      password: document.getElementById('loginPassword').value
+    });
+    btn.disabled = false; btn.textContent = 'Sign in';
+    if(error){
+      loginError.style.display = 'block';
+      loginError.textContent = error.message === 'Invalid login credentials'
+        ? 'Wrong email or password.' : ('Sign-in failed: ' + error.message);
+      return;
+    }
+    enterApp(data.session);
+  });
+
+  signOutBtn.addEventListener('click', async () => {
+    await sbAuth.auth.signOut();
+    showLogin();
+  });
+
+  // Kicked out remotely (password change, session revoked) -> back to login.
+  sbAuth.auth.onAuthStateChange((event) => {
+    if(event === 'SIGNED_OUT') showLogin();
+  });
+
+  // Existing session (login survives page reloads) or login screen.
+  sbAuth.auth.getSession().then(({ data: { session } }) => {
+    if(session) enterApp(session); else showLogin();
+  });
+
+})();
+</script>
+</body>
+</html>
