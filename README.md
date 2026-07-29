@@ -22,6 +22,18 @@ RPCs, not in the browser. Manage users in Supabase → Authentication → Users
 - Local run: put credentials in `.env.local` (see variables in the workflow file, never commit) and
   `python3 sync_ops_dashboard.py --days 3`.
 
+## Ask Claude about the data (team connector)
+
+A read-only MCP connector lets anyone in the Claude team workspace query the data in
+plain language. It is a Supabase Edge Function (`mcp-data`) exposing two tools:
+`get_schema` (data dictionary) and `run_query` (single SELECT, executed as the
+SELECT-only `dashboard_reader` Postgres role, 15s timeout, 2000-row cap).
+
+Setup (workspace admin, once): claude.ai → Settings → Connectors → Add custom
+connector → paste the connector URL (function URL with the `?key=` secret — stored in
+the team password manager, not in this repo). Rotate the secret by redeploying the
+edge function with a new value.
+
 ## Notes
 
 - `product_ref` columns in Supabase are DB-generated from `product_name` — never written by the sync.
