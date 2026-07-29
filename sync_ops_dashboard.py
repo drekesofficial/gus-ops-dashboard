@@ -213,7 +213,7 @@ def sync_sales(odoo, sb, since, now_iso):
     orders = {}
     for i in range(0, len(order_ids), BATCH_ODOO):
         for o in odoo.call('sale.order', 'read', [order_ids[i:i + BATCH_ODOO]],
-                           fields=['date_order', 'warehouse_id']):
+                           fields=['date_order', 'warehouse_id', 'partner_id']):
             orders[o['id']] = o
     out = []
     for l in lines:
@@ -223,6 +223,9 @@ def sync_sales(odoo, sb, since, now_iso):
         product_disp = m2o_name(l.get('product_id')) or ''
         out.append({
             'id': l['id'],
+            'order_id': l['order_id'][0],
+            # Pseudonymous: only the numeric partner id is synced, never names/emails.
+            'buyer_id': o['partner_id'][0] if isinstance(o.get('partner_id'), (list, tuple)) else None,
             'order_at': (o['date_order'] or '').replace(' ', 'T') + 'Z' if o.get('date_order') else None,
             'warehouse_name': m2o_name(o.get('warehouse_id')),
             'product_name': product_disp,

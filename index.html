@@ -416,6 +416,14 @@
   </div>
 
   <div id="dashboard">
+    <div class="controls" style="margin-bottom:16px;">
+      <div class="seg" id="viewSeg">
+        <button data-view="ops" class="active">Operations</button>
+        <button data-view="cust">Customers</button>
+      </div>
+    </div>
+
+    <div id="opsView">
     <div class="controls">
       <div class="seg" id="granSeg">
         <button data-gran="week" class="active">Week</button>
@@ -542,6 +550,98 @@
     </div>
 
     <footer class="note">Scrap and stock adjustment trend charts always show % of sales. "Fridges to watch" always compares scrap in € (cost) when product cost data is available. The Units/€/% toggle above only affects the KPI cards.</footer>
+    </div><!-- /opsView -->
+
+    <div id="custView" style="display:none;">
+      <div class="controls">
+        <div class="seg" id="custGranSeg">
+          <button data-gran="week" class="active">Week</button>
+          <button data-gran="month">Month</button>
+        </div>
+        <select id="custWarehouseSelect"></select>
+        <select id="custScopeSelect">
+          <option value="4">Last 4 periods</option>
+          <option value="8" selected>Last 8 periods</option>
+          <option value="13">Last 13 periods</option>
+          <option value="all">All periods</option>
+        </select>
+        <div class="spacer"></div>
+        <span class="file-status" id="custRangeLabel"></span>
+      </div>
+
+      <div class="kpi-row">
+        <div class="kpi rev">
+          <div class="label">Active buyers</div>
+          <div class="value" id="ckpiBuyers">—</div>
+          <div class="sub">latest complete period</div>
+          <div class="kpi-delta" id="ckpiBuyersDelta"></div>
+        </div>
+        <div class="kpi units">
+          <div class="label">New buyers</div>
+          <div class="value" id="ckpiNew">—</div>
+          <div class="sub" id="ckpiNewSub">first purchase here</div>
+          <div class="kpi-delta" id="ckpiNewDelta"></div>
+        </div>
+        <div class="kpi scrap">
+          <div class="label">Repeat rate</div>
+          <div class="value" id="ckpiRepeat">—</div>
+          <div class="sub">returning share of active buyers</div>
+          <div class="kpi-delta" id="ckpiRepeatDelta"></div>
+        </div>
+        <div class="kpi adj">
+          <div class="label">Revenue / buyer</div>
+          <div class="value" id="ckpiRevBuyer">—</div>
+          <div class="sub" id="ckpiRevBuyerSub">—</div>
+          <div class="kpi-delta" id="ckpiRevBuyerDelta"></div>
+        </div>
+      </div>
+
+      <div class="chart-card full" style="margin-bottom:16px;">
+        <h3>New vs returning buyers per period</h3>
+        <div class="wrap"><div id="chartBuyers" class="chart-svg"></div></div>
+      </div>
+
+      <div class="chart-grid">
+        <div class="chart-card">
+          <h3>Revenue per buyer</h3>
+          <div class="wrap"><div id="chartRevPerBuyer" class="chart-svg"></div></div>
+        </div>
+        <div class="chart-card">
+          <h3>Orders per buyer</h3>
+          <div class="wrap"><div id="chartOrdersPerBuyer" class="chart-svg"></div></div>
+        </div>
+      </div>
+
+      <div class="chart-card full" style="margin-bottom:22px;">
+        <h3>Retention cohorts <span id="cohortScope" style="font-weight:400;color:var(--ink-soft);">(monthly, % of cohort still buying)</span></h3>
+        <div class="matrix-scroll"><table class="matrix" id="cohortTable"></table></div>
+        <div class="matrix-legend">Reading: of buyers whose first purchase was in the row's month, the % still buying n months later.</div>
+      </div>
+
+      <div class="chart-card full" style="margin-bottom:22px;">
+        <h3>Buyer concentration <span id="concScope" style="font-weight:400;color:var(--ink-soft);"></span></h3>
+        <p style="font-size:12.5px;color:var(--ink-soft);margin:0 0 10px;">Share of a fridge's revenue coming from its top-10 buyers. High = fragile (a few leavers can sink the fridge).</p>
+        <div class="wrap" style="height:320px;"><div id="chartConcentration" class="chart-svg"></div></div>
+      </div>
+
+      <div class="chart-card full">
+        <div class="detail-header">
+          <h3>Assortment <span id="prodScope" style="font-weight:400;color:var(--ink-soft);"></span></h3>
+        </div>
+        <div class="movers-grid">
+          <div class="movers-col">
+            <h4>Top products by revenue</h4>
+            <div class="table-scroll" style="max-height:340px;"><table class="data" id="topProdTable"></table></div>
+          </div>
+          <div class="movers-col">
+            <h4>Most scrap-prone products (scrap € vs sold €)</h4>
+            <div class="table-scroll" style="max-height:340px;"><table class="data" id="scrapProdTable"></table></div>
+          </div>
+        </div>
+      </div>
+
+      <footer class="note">Buyers are pseudonymous Odoo partner IDs — no names are stored outside Odoo. "New buyer" counts a buyer's first-ever purchase at the selected fridge (or anywhere, for the network view).</footer>
+    </div><!-- /custView -->
   </div>
 
 </div>
@@ -1870,6 +1970,200 @@
     const sorted = [...totals.entries()].sort((a,b)=>b[1]-a[1]).slice(0,15)
       .map(([label,value]) => ({ label, value }));
     renderHBarChart('chartTopWarehouses', sorted, { color:getVar('--teal'), format: v => fmtEUR(v) });
+  }
+
+  // ---------- Customers tab ----------
+  let custGran = 'week';
+  let custStarted = false;
+
+  function periodLabelFromKey(k, gran){
+    const y = Math.floor(k/100), r = k%100;
+    return gran === 'week' ? 'W' + pad2(r) + '-' + y : pad2(r) + '-' + y;
+  }
+
+  document.getElementById('viewSeg').addEventListener('click', e => {
+    const btn = e.target.closest('button');
+    if(!btn) return;
+    document.querySelectorAll('#viewSeg button').forEach(b=>b.classList.toggle('active', b===btn));
+    const cust = btn.dataset.view === 'cust';
+    document.getElementById('opsView').style.display = cust ? 'none' : '';
+    document.getElementById('custView').style.display = cust ? '' : 'none';
+    if(cust && !custStarted){ custStarted = true; populateCustWarehouseSelect(); custRefresh(); }
+  });
+
+  document.getElementById('custGranSeg').addEventListener('click', e => {
+    const btn = e.target.closest('button');
+    if(!btn) return;
+    custGran = btn.dataset.gran;
+    document.querySelectorAll('#custGranSeg button').forEach(b=>b.classList.toggle('active', b===btn));
+    custRefresh();
+  });
+  document.getElementById('custScopeSelect').addEventListener('change', custRefresh);
+
+  function populateCustWarehouseSelect(){
+    const sel = document.getElementById('custWarehouseSelect');
+    sel.innerHTML = '';
+    const optAll = document.createElement('option');
+    optAll.value = '__ALL__'; optAll.textContent = 'All fridges (network)';
+    sel.appendChild(optAll);
+    for(const wh of ALL_WAREHOUSES){
+      const opt = document.createElement('option');
+      opt.value = wh; opt.textContent = wh;
+      sel.appendChild(opt);
+    }
+    if(!sel.dataset.bound){ sel.dataset.bound='1'; sel.addEventListener('change', custRefresh); }
+  }
+
+  function custDelta(elId, cur, prev, fmtFn, goodIfUp){
+    renderKpiDelta(elId, cur, prev === undefined ? null : prev, fmtFn, goodIfUp);
+  }
+
+  async function custRefresh(){
+    if(DATA_SOURCE !== 'supabase') return; // customer layer needs the database
+    const wh = document.getElementById('custWarehouseSelect').value || '__ALL__';
+    const scopeN = document.getElementById('custScopeSelect').value;
+    document.getElementById('custRangeLabel').textContent = 'Loading…';
+    try{
+      const summary = await rpc('get_cust_summary', { p_granularity: custGran });
+      const mine = summary.filter(r => r.warehouse === wh);
+      const periods = [...new Set(mine.map(r => r.period_key))].sort((a,b)=>a-b);
+      const byP = new Map(mine.map(r => [r.period_key, r]));
+
+      // Exclude the in-progress period from KPIs/scope (same rule as the ops view).
+      const complete = periods.filter(p => isPeriodComplete(p, custGran));
+      const labels = complete.map(p => periodLabelFromKey(p, custGran));
+      const rows = complete.map(p => byP.get(p));
+
+      // KPIs: latest complete period vs the one before.
+      const last = rows[rows.length-1], prev = rows[rows.length-2];
+      const rate = r => r && r.buyers ? (r.buyers - r.new_buyers)/r.buyers*100 : 0;
+      const rpb = r => r && r.buyers ? r.revenue/r.buyers : 0;
+      if(last){
+        document.getElementById('ckpiBuyers').textContent = fmtNum(last.buyers);
+        document.getElementById('ckpiNew').textContent = fmtNum(last.new_buyers);
+        document.getElementById('ckpiRepeat').textContent = fmtPct(rate(last));
+        document.getElementById('ckpiRevBuyer').textContent = fmtEUR(rpb(last));
+        document.getElementById('ckpiRevBuyerSub').textContent =
+          (last.orders && last.buyers ? (last.orders/last.buyers).toFixed(1) + ' orders/buyer' : '—');
+        custDelta('ckpiBuyersDelta', last.buyers, prev && prev.buyers, fmtNum, true);
+        custDelta('ckpiNewDelta', last.new_buyers, prev && prev.new_buyers, fmtNum, true);
+        custDelta('ckpiRepeatDelta', rate(last), prev && rate(prev), fmtPct, true);
+        custDelta('ckpiRevBuyerDelta', rpb(last), prev && rpb(prev), fmtEUR, true);
+      }
+      document.getElementById('custRangeLabel').textContent =
+        labels.length ? labels[0] + ' — ' + labels[labels.length-1] : '';
+
+      // Trend charts (all complete periods).
+      drawLineBar('chartBuyers', labels, [
+        { label:'New', data: rows.map(r=>r.new_buyers), color: getVar('--amber') },
+        { label:'Returning', data: rows.map(r=>r.buyers - r.new_buyers), color: getVar('--teal') }
+      ], { grouped:true, legend:true, valueLabels:false, yFormat: v=>fmtNum(v), tooltipFormat: v=>fmtNum(v) });
+      drawLineBar('chartRevPerBuyer', labels,
+        [{ label:'€/buyer', data: rows.map(rpb), color: getVar('--teal-dark') }],
+        { yFormat: v=>fmtEUR(v), tooltipFormat: v=>fmtEUR(v) });
+      drawLineBar('chartOrdersPerBuyer', labels,
+        [{ label:'orders/buyer', data: rows.map(r=>r.buyers?r.orders/r.buyers:0), color: getVar('--green') }],
+        { yFormat: v=>v.toFixed(1), tooltipFormat: v=>v.toFixed(2) });
+
+      // Scoped range for concentration + assortment.
+      const scopePeriods = scopeN === 'all' ? complete : complete.slice(-parseInt(scopeN,10));
+      if(scopePeriods.length){
+        const pFrom = scopePeriods[0], pTo = scopePeriods[scopePeriods.length-1];
+        const scopeText = periodLabelFromKey(pFrom,custGran) + ' — ' + periodLabelFromKey(pTo,custGran);
+        document.getElementById('concScope').textContent = '(' + scopeText + ', all fridges)';
+        document.getElementById('prodScope').textContent =
+          '(' + (wh==='__ALL__' ? 'network' : wh) + ' · ' + scopeText + ')';
+
+        const [cohorts, conc, prods] = await Promise.all([
+          rpc('get_cust_cohorts', { p_warehouse: wh }),
+          rpc('get_cust_concentration', { p_granularity: custGran, p_from: pFrom, p_to: pTo }),
+          rpc('get_prod_insights', { p_granularity: custGran, p_from: pFrom, p_to: pTo, p_warehouse: wh })
+        ]);
+        renderCohorts(cohorts);
+        renderHBarChart('chartConcentration',
+          conc.filter(c=>c.buyers >= 10).slice(0,15)
+              .map(c=>({ label:c.warehouse, value:Number(c.top10_share) })),
+          { color:getVar('--rose'), format:v=>v.toFixed(1)+'%' });
+        renderProdTables(prods);
+      }
+    }catch(err){
+      console.error(err);
+      document.getElementById('custRangeLabel').textContent = 'Failed to load: ' + err.message;
+    }
+  }
+
+  function renderCohorts(rows){
+    const table = document.getElementById('cohortTable');
+    clearNode(table);
+    if(!rows.length) return;
+    const cohorts = [...new Set(rows.map(r=>r.cohort))].sort((a,b)=>a-b);
+    const maxOff = Math.max(...rows.map(r=>r.month_offset));
+    const get = (c,o) => { const r = rows.find(x=>x.cohort===c && x.month_offset===o); return r ? Number(r.buyers) : null; };
+    const thead = document.createElement('thead');
+    thead.innerHTML = '<tr><th>Cohort</th><th>Size</th>' +
+      Array.from({length:maxOff},(_,i)=>'<th>+'+(i+1)+'m</th>').join('') + '</tr>';
+    table.appendChild(thead);
+    const tbody = document.createElement('tbody');
+    cohorts.forEach(c => {
+      const size = get(c,0) || 0;
+      const tr = document.createElement('tr');
+      const th = document.createElement('th');
+      th.textContent = periodLabelFromKey(c,'month');
+      tr.appendChild(th);
+      const tdSize = document.createElement('td');
+      tdSize.textContent = fmtNum(size);
+      tr.appendChild(tdSize);
+      for(let o=1;o<=maxOff;o++){
+        const td = document.createElement('td');
+        const v = get(c,o);
+        if(v !== null && size){
+          const pct = v/size*100;
+          td.textContent = pct.toFixed(0)+'%';
+          td.style.background = 'rgba(14,124,134,' + Math.min(pct/100,1)*0.45 + ')';
+        }else{
+          td.textContent = '';
+        }
+        tr.appendChild(td);
+      }
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+  }
+
+  function renderProdTables(prods){
+    const top = document.getElementById('topProdTable');
+    clearNode(top);
+    top.innerHTML = '<thead><tr><th>Product</th><th>Units</th><th>Revenue</th></tr></thead>';
+    const tb = document.createElement('tbody');
+    prods.slice(0,15).forEach(p => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = '<td title="'+(p.product_category||'')+'"></td><td></td><td></td>';
+      tr.children[0].textContent = p.product_name;
+      tr.children[1].textContent = fmtNum(p.units);
+      tr.children[2].textContent = fmtEUR(p.revenue);
+      tb.appendChild(tr);
+    });
+    top.appendChild(tb);
+
+    const scrapT = document.getElementById('scrapProdTable');
+    clearNode(scrapT);
+    scrapT.innerHTML = '<thead><tr><th>Product</th><th>Scrap €</th><th>Scrap ratio</th></tr></thead>';
+    const tb2 = document.createElement('tbody');
+    prods
+      .filter(p => Number(p.scrap_value) > 0)
+      .map(p => ({...p, ratio: Number(p.scrap_value)/(Number(p.revenue)+Number(p.scrap_value))*100 }))
+      .sort((a,b)=>b.scrap_value-a.scrap_value)
+      .slice(0,15)
+      .forEach(p => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = '<td></td><td></td><td class="neg"></td>';
+        tr.children[0].textContent = p.product_name;
+        tr.children[1].textContent = fmtEUR(p.scrap_value);
+        tr.children[2].textContent = p.ratio.toFixed(0)+'%';
+        tb2.appendChild(tr);
+      });
+    tb2.childElementCount || (tb2.innerHTML = '<tr><td colspan="3" style="color:var(--ink-soft);">No scrap in this range.</td></tr>');
+    scrapT.appendChild(tb2);
   }
 
   // ---------- Auth gate ----------
