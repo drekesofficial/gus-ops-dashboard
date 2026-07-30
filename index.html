@@ -481,7 +481,7 @@
         <button data-mode="percent">% of sales</button>
       </div>
       <div id="warehousePicker" class="period-picker"></div>
-      <select id="categorySelect"></select>
+      <div id="categoryPicker" class="period-picker"></div>
       <div id="mainRangePicker"></div>
       <select id="compareSelect">
         <option value="off">No comparison</option>
@@ -780,7 +780,7 @@
   let ALL_CATEGORIES = [];
   let currentGran = 'week';
   let currentValueMode = 'units'; // 'units' | 'eur' | 'percent'
-  let currentCategoryFilter = '__ALL__';
+  let selectedCategories = null; // null = all categories (no filter); otherwise a Set
 
   // ---------- Supabase (primary data source) ----------
   // The dashboard reads a PRE-AGGREGATED rollup via three read-only RPCs. It never
@@ -822,8 +822,8 @@
     return null;
   }
   function matchesCategory(productName){
-    if(currentCategoryFilter === '__ALL__') return true;
-    return categoryFor(productName) === currentCategoryFilter;
+    if(!selectedCategories) return true;
+    return selectedCategories.has(categoryFor(productName));
   }
 
   function handleFile(file){
@@ -884,8 +884,8 @@
     ALL_CATEGORIES = [...categorySet].sort((a,b)=>a.localeCompare(b));
 
     computeFullWarehouseSet();
-    currentCategoryFilter = '__ALL__';
-    buildAggregates(currentCategoryFilter);
+    selectedCategories = null;
+    buildAggregates();
     DATA_SOURCE = 'xlsx';
     HAS_COST = RAW.products.length > 0;
     reloadBtn.textContent = 'Load another file';
@@ -971,10 +971,10 @@
 
   async function loadFromSupabase(opts){
     opts = opts || {};
-    const category = currentCategoryFilter === '__ALL__' ? null : currentCategoryFilter;
+    const categories = categoryFilterParam();
     const calls = [
-      rpc('get_ops_rollup', { p_granularity:'week',  p_category: category }),
-      rpc('get_ops_rollup', { p_granularity:'month', p_category: category })
+      rpc('get_ops_rollup', { p_granularity:'week',  p_categories: categories }),
+      rpc('get_ops_rollup', { p_granularity:'month', p_categories: categories })
     ];
     // Meta and the category list only need fetching on the initial load.
     if(!opts.categoryChangeOnly){
@@ -1064,7 +1064,7 @@
     return periodEntry.warehouses.get(wh);
   }
 
-  function buildAggregates(categoryFilter){
+  function buildAggregates(){
     const week = new Map();
     const month = new Map();
 
@@ -1222,47 +1222,107 @@
     container.appendChild(panel);
   }
 
+  // null when every category is checked -> no server-side filter at all.
+  function categoryFilterParam(){
+    if(!selectedCategories) return null;
+    if(selectedCategories.size === ALL_CATEGORIES.length) return null;
+    return [...selectedCategories];
+  }
+
   function populateCategorySelect(){
-    const sel = document.getElementById('categorySelect');
-    sel.innerHTML = '';
-    const optAll = document.createElement('option');
-    optAll.value = '__ALL__';
-    optAll.textContent = 'All categories';
-    sel.appendChild(optAll);
-    for(const cat of ALL_CATEGORIES){
-      const opt = document.createElement('option');
-      opt.value = cat; opt.textContent = cat;
-      sel.appendChild(opt);
+    selectedCategories = null; // fresh load: everything checked
+    buildCategoryPicker();
+  }
+
+  async function applyCategorySelection(){
+    if(DATA_SOURCE === 'supabase'){
+      // Category is a server-side parameter, so this is a refetch rather than a
+      // client-side rebuild - keeps the payload at period x fridge grain.
+      const prev = fileStatusText.textContent;
+      fileStatusText.textContent = 'Filtering\u2026';
+      try{
+        await loadFromSupabase({ categoryChangeOnly: true });
+        resetDayCache(); // day rollup is fetched per category set server-side
+        fileStatusText.textContent = supabaseStatusText();
+        renderAll();
+      }catch(err){
+        console.error(err);
+        fileStatusText.textContent = prev;
+        showError('Could not apply the category filter: ' + err.message);
+      }
+    }else{
+      buildAggregates();
+      renderAll();
     }
-    sel.style.display = ALL_CATEGORIES.length ? '' : 'none';
-    if(!sel.dataset.bound){
-      sel.dataset.bound = '1';
-      sel.addEventListener('change', async () => {
-        currentCategoryFilter = sel.value;
-        if(DATA_SOURCE === 'supabase'){
-          // Category is a server-side parameter, so this is a refetch rather than a
-          // client-side rebuild — keeps the payload at period × fridge grain.
-          sel.disabled = true;
-          const prev = fileStatusText.textContent;
-          fileStatusText.textContent = 'Filtering…';
-          try{
-            await loadFromSupabase({ categoryChangeOnly: true });
-            resetDayCache(); // day rollup is fetched per category server-side
-            fileStatusText.textContent = supabaseStatusText();
-            renderAll();
-          }catch(err){
-            console.error(err);
-            fileStatusText.textContent = prev;
-            showError('Could not apply the category filter: ' + err.message);
-          }finally{
-            sel.disabled = false;
-          }
-        }else{
-          buildAggregates(currentCategoryFilter);
-          renderAll();
-        }
+  }
+
+  function buildCategoryPicker(){
+    const container = document.getElementById('categoryPicker');
+    const wasOpen = container.classList.contains('open');
+    clearNode(container);
+    container.className = 'period-picker' + (wasOpen ? ' open' : '');
+    container.style.display = ALL_CATEGORIES.length ? '' : 'none';
+
+    const checked = selectedCategories || new Set(ALL_CATEGORIES);
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'period-picker-btn';
+    if(checked.size === ALL_CATEGORIES.length) btn.textContent = 'All categories';
+    else if(checked.size === 0) btn.textContent = 'No categories';
+    else if(checked.size === 1) btn.textContent = [...checked][0];
+    else btn.textContent = checked.size + ' of ' + ALL_CATEGORIES.length + ' categories';
+    btn.addEventListener('click', e => { e.stopPropagation(); container.classList.toggle('open'); });
+    container.appendChild(btn);
+
+    const panel = document.createElement('div');
+    panel.className = 'period-picker-panel';
+    panel.addEventListener('click', e => e.stopPropagation());
+
+    const actions = document.createElement('div');
+    actions.className = 'period-picker-actions';
+    [['Select all', () => { selectedCategories = null; }],
+     ['Clear', () => { selectedCategories = new Set(); }]
+    ].forEach(([label, fn]) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.textContent = label;
+      b.addEventListener('click', e => { e.stopPropagation(); fn(); buildCategoryPicker(); applyCategorySelection(); });
+      actions.appendChild(b);
+    });
+    panel.appendChild(actions);
+
+    const search = document.createElement('input');
+    search.type = 'text';
+    search.placeholder = 'Filter\u2026';
+    search.style.cssText = 'width:100%;margin:2px 0 6px;padding:5px 8px;font-size:12px;border:1px solid var(--line);border-radius:6px;font-family:Inter,sans-serif;';
+    search.addEventListener('input', () => {
+      const q = search.value.toLowerCase();
+      panel.querySelectorAll('.period-picker-option').forEach(o => {
+        o.style.display = o.textContent.toLowerCase().includes(q) ? '' : 'none';
       });
-    }
+    });
+    panel.appendChild(search);
+
+    ALL_CATEGORIES.forEach(cat => {
+      const label = document.createElement('label');
+      label.className = 'period-picker-option';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = checked.has(cat);
+      cb.addEventListener('change', () => {
+        const set = selectedCategories ? new Set(selectedCategories) : new Set(ALL_CATEGORIES);
+        if(cb.checked) set.add(cat); else set.delete(cat);
+        selectedCategories = set.size === ALL_CATEGORIES.length ? null : set;
+        buildCategoryPicker();
+        applyCategorySelection();
+      });
+      const span = document.createElement('span');
+      span.textContent = cat;
+      label.appendChild(cb);
+      label.appendChild(span);
+      panel.appendChild(label);
+    });
+
+    container.appendChild(panel);
   }
 
   document.getElementById('granSeg').addEventListener('click', e=>{
@@ -1373,8 +1433,7 @@
     if(DAY.fetchedFrom !== null && fromKey >= DAY.fetchedFrom && toKey <= DAY.fetchedTo) return;
     const from = DAY.fetchedFrom === null ? fromKey : Math.min(fromKey, DAY.fetchedFrom);
     const to = DAY.fetchedTo === null ? toKey : Math.max(toKey, DAY.fetchedTo);
-    const category = currentCategoryFilter === '__ALL__' ? null : currentCategoryFilter;
-    const rows = await rpc('get_ops_rollup', { p_granularity:'day', p_category:category, p_from:from, p_to:to });
+    const rows = await rpc('get_ops_rollup', { p_granularity:'day', p_categories:categoryFilterParam(), p_from:from, p_to:to });
     const fresh = rollupToStore(rows);
     for(const [k, v] of fresh) DAY.store.set(k, v);
     DAY.fetchedFrom = from; DAY.fetchedTo = to;
