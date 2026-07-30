@@ -616,43 +616,43 @@
 
       <div class="kpi-row">
         <div class="kpi rev">
-          <div class="label">Active buyers</div>
+          <div class="label">Unique customers</div>
           <div class="value" id="ckpiBuyers">—</div>
-          <div class="sub">latest complete period</div>
+          <div class="sub">at least 1 purchase in the selected period</div>
           <div class="kpi-delta" id="ckpiBuyersDelta"></div>
         </div>
         <div class="kpi units">
-          <div class="label">New buyers</div>
+          <div class="label">New customers</div>
           <div class="value" id="ckpiNew">—</div>
-          <div class="sub" id="ckpiNewSub">first purchase here</div>
+          <div class="sub" id="ckpiNewSub">first-ever purchase in the selected period</div>
           <div class="kpi-delta" id="ckpiNewDelta"></div>
         </div>
         <div class="kpi scrap">
-          <div class="label">Repeat rate</div>
+          <div class="label">Avg order value</div>
           <div class="value" id="ckpiRepeat">—</div>
-          <div class="sub">returning share of active buyers</div>
+          <div class="sub">revenue / orders in the selected period</div>
           <div class="kpi-delta" id="ckpiRepeatDelta"></div>
         </div>
         <div class="kpi adj">
-          <div class="label">Revenue / buyer</div>
+          <div class="label">Frequency</div>
           <div class="value" id="ckpiRevBuyer">—</div>
-          <div class="sub" id="ckpiRevBuyerSub">—</div>
+          <div class="sub" id="ckpiRevBuyerSub">orders per customer in the selected period</div>
           <div class="kpi-delta" id="ckpiRevBuyerDelta"></div>
         </div>
       </div>
 
       <div class="chart-card full" style="margin-bottom:16px;">
-        <h3>New vs returning buyers per period</h3>
+        <h3>New vs returning customers per period</h3>
         <div class="wrap"><div id="chartBuyers" class="chart-svg"></div></div>
       </div>
 
       <div class="chart-grid">
         <div class="chart-card">
-          <h3>Revenue per buyer</h3>
+          <h3>Revenue per customer</h3>
           <div class="wrap"><div id="chartRevPerBuyer" class="chart-svg"></div></div>
         </div>
         <div class="chart-card">
-          <h3>Orders per buyer</h3>
+          <h3>Orders per customer</h3>
           <div class="wrap"><div id="chartOrdersPerBuyer" class="chart-svg"></div></div>
         </div>
       </div>
@@ -660,12 +660,12 @@
       <div class="chart-card full" style="margin-bottom:22px;">
         <h3>Retention cohorts <span id="cohortScope" style="font-weight:400;color:var(--ink-soft);">(monthly, % of cohort still buying)</span></h3>
         <div class="matrix-scroll"><table class="matrix" id="cohortTable"></table></div>
-        <div class="matrix-legend">Reading: of buyers whose first purchase was in the row's month, the % still buying n months later.</div>
+        <div class="matrix-legend">Reading: of customers whose first purchase was in the row's month, the % still buying n months later.</div>
       </div>
 
       <div class="chart-card full" style="margin-bottom:22px;">
-        <h3>Buyer concentration <span id="concScope" style="font-weight:400;color:var(--ink-soft);"></span></h3>
-        <p style="font-size:12.5px;color:var(--ink-soft);margin:0 0 10px;">Share of a fridge's revenue coming from its top-10 buyers. High = fragile (a few leavers can sink the fridge).</p>
+        <h3>Customer concentration <span id="concScope" style="font-weight:400;color:var(--ink-soft);"></span></h3>
+        <p style="font-size:12.5px;color:var(--ink-soft);margin:0 0 10px;">Share of a fridge's revenue coming from its top-10 customers. High = fragile (a few leavers can sink the fridge).</p>
         <div class="wrap" style="height:320px;"><div id="chartConcentration" class="chart-svg"></div></div>
       </div>
 
@@ -685,7 +685,7 @@
         </div>
       </div>
 
-      <footer class="note">Buyers are pseudonymous Odoo partner IDs — no names are stored outside Odoo. "New buyer" counts a buyer's first-ever purchase at the selected fridge (or anywhere, for the network view).</footer>
+      <footer class="note">Customers are pseudonymous Odoo partner IDs — no names are stored outside Odoo. "New customer" counts a customer's first-ever purchase at the selected fridge (or anywhere, for the network view).</footer>
     </div><!-- /custView -->
   </div>
 
@@ -1165,7 +1165,7 @@
     }else if(selectedFridges.size === total){
       btn.textContent = 'All incl. test/demo (' + total + ')';
     }else if(selectedFridges.size === 1){
-      btn.textContent = [...selectedFridges][0];
+      btn.textContent = fridgeLabel([...selectedFridges][0]);
     }else{
       btn.textContent = selectedFridges.size + ' of ' + total + ' fridges';
     }
@@ -1213,7 +1213,7 @@
         renderAll();
       });
       const span = document.createElement('span');
-      span.textContent = wh + (isRealFridge(wh) ? '' : ' ⚠');
+      span.textContent = fridgeLabel(wh) + (isRealFridge(wh) ? '' : ' ⚠');
       label.appendChild(cb);
       label.appendChild(span);
       panel.appendChild(label);
@@ -1691,20 +1691,20 @@
       const avgScrap = avg(scrapField);
       const scrapFloor = hasCost ? 15 : 5;
       if(avgScrap > 0 && lastScrap > avgScrap*1.6 && (lastScrap-avgScrap) > scrapFloor){
-        flags.push({ severity:'bad', text: wh + ': scrap ' + valFmt(lastScrap) + ' this period vs an average of ' + valFmt(avgScrap) + ' — up ' + Math.round((lastScrap/avgScrap-1)*100) + '%.' });
+        flags.push({ severity:'bad', text: fridgeLabel(wh) + ': scrap ' + valFmt(lastScrap) + ' this period vs an average of ' + valFmt(avgScrap) + ' — up ' + Math.round((lastScrap/avgScrap-1)*100) + '%.' });
       }
 
       const lastRev = lastVals.revenue || 0;
       const avgRev = avg('revenue');
       if(avgRev > 0 && lastRev < avgRev*0.6){
-        flags.push({ severity:'bad', text: wh + ': revenue ' + fmtEUR(lastRev) + ' this period, down from an average of ' + fmtEUR(avgRev) + '.' });
+        flags.push({ severity:'bad', text: fridgeLabel(wh) + ': revenue ' + fmtEUR(lastRev) + ' this period, down from an average of ' + fmtEUR(avgRev) + '.' });
       }
 
       const lastLoss = (lastVals[adjNegField]||0) - (lastVals[adjPosField]||0);
       const avgLoss = avg(adjNegField) - avg(adjPosField);
       const lossFloor = hasCost ? 15 : 5;
       if(lastLoss > 0 && lastLoss > Math.max(avgLoss*1.6, avgLoss + lossFloor)){
-        flags.push({ severity:'warn', text: wh + ': net stock loss of ' + valFmt(lastLoss) + ' this period, above its recent average.' });
+        flags.push({ severity:'warn', text: fridgeLabel(wh) + ': net stock loss of ' + valFmt(lastLoss) + ' this period, above its recent average.' });
       }
     });
 
@@ -1778,7 +1778,7 @@
       row.className = 'movers-row';
       const name = document.createElement('div');
       name.className = 'm-name';
-      name.textContent = it.wh;
+      name.textContent = fridgeLabel(it.wh);
       name.title = it.wh;
       const delta = document.createElement('div');
       const isGood = it.delta === 0 ? null : (goodIfUp ? it.delta >= 0 : it.delta <= 0);
@@ -1953,7 +1953,7 @@
       document.getElementById('marginNote').textContent = 'Upload the Products sheet (with cost data) to see the margin breakdown.';
     }
     document.getElementById('marginScope').textContent =
-      '(' + (selectedWh.length === 1 ? selectedWh[0] : selectedWh.length + ' fridges') + ' · ' + scopeText + ')';
+      '(' + (selectedWh.length === 1 ? fridgeLabel(selectedWh[0]) : selectedWh.length + ' fridges') + ' · ' + scopeText + ')';
 
     // ---- Trend charts: reference target lines (editable, default 5% scrap / -2% net adjustment) ----
     const scrapTargetVal = parseFloat(document.getElementById('scrapTarget').value);
@@ -2012,6 +2012,11 @@
 
     // ---- Quick-read summary banner ----
     renderInsightBanner(cur, prevTotals, flags, scopeText);
+  }
+
+  // Display name: "Acme - Fridge 1" -> "Acme", "Acme - Fridge 2" -> "Acme 2".
+  function fridgeLabel(wh){
+    return String(wh).replace(/\s*-\s*Fridge 1\b/i, '').replace(/\s*-\s*Fridge (\d+)\b/i, ' $1');
   }
 
   function getVar(name){
@@ -2223,7 +2228,7 @@
       }
     }
     const ranked = [...totals.entries()].sort((a,b)=>b[1]-a[1])
-      .map(([label,value]) => ({ label, value }));
+      .map(([label,value]) => ({ label: fridgeLabel(label), value }));
     renderHBarChart('chartTopWarehouses', ranked.slice(0,15), { color:getVar('--teal'), format: v => fmtEUR(v) });
     renderHBarChart('chartBottomWarehouses', ranked.slice(-15).reverse(), { color:getVar('--amber'), format: v => fmtEUR(v) });
   }
@@ -2265,14 +2270,17 @@
     sel.appendChild(optAll);
     for(const wh of ALL_WAREHOUSES){
       const opt = document.createElement('option');
-      opt.value = wh; opt.textContent = wh;
+      opt.value = wh; opt.textContent = fridgeLabel(wh);
       sel.appendChild(opt);
     }
     if(!sel.dataset.bound){ sel.dataset.bound='1'; sel.addEventListener('change', custRefresh); }
   }
 
   function custDelta(elId, cur, prev, fmtFn, goodIfUp){
+    const keep = compareLabelText;
+    compareLabelText = 'vs the preceding period of equal length';
     renderKpiDelta(elId, cur, prev === undefined ? null : prev, fmtFn, goodIfUp);
+    compareLabelText = keep;
   }
 
   async function custRefresh(){
@@ -2284,28 +2292,34 @@
       const mine = summary.filter(r => r.warehouse === wh);
       const byP = new Map(mine.map(r => [r.period_key, r]));
 
-      // Periods covered by the picked date range, minus the in-progress one for KPIs.
+      // Periods covered by the picked date range (trend charts).
       const rangeKeys = rangeToKeys(custRange, custGran).filter(p => byP.has(p));
       const complete = rangeKeys.filter(p => isPeriodComplete(p, custGran));
       const labels = complete.map(p => periodLabelFromKey(p, custGran));
       const rows = complete.map(p => byP.get(p));
-
-      // KPIs: latest complete period vs the one before.
-      const last = rows[rows.length-1], prev = rows[rows.length-2];
-      const rate = r => r && r.buyers ? (r.buyers - r.new_buyers)/r.buyers*100 : 0;
       const rpb = r => r && r.buyers ? r.revenue/r.buyers : 0;
-      if(last){
-        document.getElementById('ckpiBuyers').textContent = fmtNum(last.buyers);
-        document.getElementById('ckpiNew').textContent = fmtNum(last.new_buyers);
-        document.getElementById('ckpiRepeat').textContent = fmtPct(rate(last));
-        document.getElementById('ckpiRevBuyer').textContent = fmtEUR(rpb(last));
-        document.getElementById('ckpiRevBuyerSub').textContent =
-          (last.orders && last.buyers ? (last.orders/last.buyers).toFixed(1) + ' orders/buyer' : '—');
-        custDelta('ckpiBuyersDelta', last.buyers, prev && prev.buyers, fmtNum, true);
-        custDelta('ckpiNewDelta', last.new_buyers, prev && prev.new_buyers, fmtNum, true);
-        custDelta('ckpiRepeatDelta', rate(last), prev && rate(prev), fmtPct, true);
-        custDelta('ckpiRevBuyerDelta', rpb(last), prev && rpb(prev), fmtEUR, true);
-      }
+
+      // KPIs: exact-date range stats (unique customers cannot be summed across periods),
+      // compared against the equal-length window immediately before the range.
+      const iso = d => d.getFullYear() + '-' + pad2(d.getMonth()+1) + '-' + pad2(d.getDate());
+      const len = daysBetween(custRange.start, custRange.end);
+      const prevEnd = addDays(custRange.start, -1);
+      const prevStart = addDays(prevEnd, -len);
+      const [cur, prevStats] = await Promise.all([
+        rpc('get_cust_range', { p_start: iso(custRange.start), p_end: iso(custRange.end), p_warehouse: wh }),
+        rpc('get_cust_range', { p_start: iso(prevStart), p_end: iso(prevEnd), p_warehouse: wh })
+      ]);
+      const aov = r => r && r.orders ? r.revenue/r.orders : 0;
+      const freq = r => r && r.customers ? r.orders/r.customers : 0;
+      const fmtEUR2 = n => new Intl.NumberFormat('en-BE', { style:'currency', currency:'EUR', maximumFractionDigits:2 }).format(n);
+      document.getElementById('ckpiBuyers').textContent = fmtNum(cur.customers);
+      document.getElementById('ckpiNew').textContent = fmtNum(cur.new_customers);
+      document.getElementById('ckpiRepeat').textContent = fmtEUR2(aov(cur));
+      document.getElementById('ckpiRevBuyer').textContent = freq(cur).toFixed(2);
+      custDelta('ckpiBuyersDelta', cur.customers, prevStats.customers, fmtNum, true);
+      custDelta('ckpiNewDelta', cur.new_customers, prevStats.new_customers, fmtNum, true);
+      custDelta('ckpiRepeatDelta', aov(cur), aov(prevStats), fmtEUR2, true);
+      custDelta('ckpiRevBuyerDelta', freq(cur), freq(prevStats), n => n.toFixed(2), true);
       document.getElementById('custRangeLabel').textContent = fmtRange(custRange);
 
       // Trend charts (all complete periods).
@@ -2314,10 +2328,10 @@
         { label:'Returning', data: rows.map(r=>r.buyers - r.new_buyers), color: getVar('--teal') }
       ], { grouped:true, legend:true, valueLabels:false, yFormat: v=>fmtNum(v), tooltipFormat: v=>fmtNum(v) });
       drawLineBar('chartRevPerBuyer', labels,
-        [{ label:'€/buyer', data: rows.map(rpb), color: getVar('--teal-dark') }],
+        [{ label:'€/customer', data: rows.map(rpb), color: getVar('--teal-dark') }],
         { yFormat: v=>fmtEUR(v), tooltipFormat: v=>fmtEUR(v) });
       drawLineBar('chartOrdersPerBuyer', labels,
-        [{ label:'orders/buyer', data: rows.map(r=>r.buyers?r.orders/r.buyers:0), color: getVar('--green') }],
+        [{ label:'orders/customer', data: rows.map(r=>r.buyers?r.orders/r.buyers:0), color: getVar('--green') }],
         { yFormat: v=>v.toFixed(1), tooltipFormat: v=>v.toFixed(2) });
 
       // Concentration + assortment follow the same picked range.
@@ -2327,7 +2341,7 @@
         const scopeText = periodLabelFromKey(pFrom,custGran) + ' — ' + periodLabelFromKey(pTo,custGran);
         document.getElementById('concScope').textContent = '(' + scopeText + ', all fridges)';
         document.getElementById('prodScope').textContent =
-          '(' + (wh==='__ALL__' ? 'network' : wh) + ' · ' + scopeText + ')';
+          '(' + (wh==='__ALL__' ? 'network' : fridgeLabel(wh)) + ' · ' + scopeText + ')';
 
         const [cohorts, conc, prods] = await Promise.all([
           rpc('get_cust_cohorts', { p_warehouse: wh }),
@@ -2337,7 +2351,7 @@
         renderCohorts(cohorts);
         renderHBarChart('chartConcentration',
           conc.filter(c=>c.buyers >= 10).slice(0,15)
-              .map(c=>({ label:c.warehouse, value:Number(c.top10_share) })),
+              .map(c=>({ label:fridgeLabel(c.warehouse), value:Number(c.top10_share) })),
           { color:getVar('--rose'), format:v=>v.toFixed(1)+'%' });
         renderProdTables(prods);
       }
