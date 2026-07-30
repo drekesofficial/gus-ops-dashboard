@@ -325,7 +325,7 @@
   }
 
   /* ---------- New: fridges-to-watch movers grid ---------- */
-  .movers-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;}
+  .movers-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:24px;}
   .movers-col h4{
     font-family:'Inter';font-size:12px;text-transform:uppercase;letter-spacing:.05em;
     color:var(--ink-soft);margin:0 0 10px;font-weight:600;
@@ -591,6 +591,10 @@
         <div class="movers-col">
           <h4>Biggest scrap % changes</h4>
           <div id="moversScrap"></div>
+        </div>
+        <div class="movers-col">
+          <h4>Biggest stock adjustment changes</h4>
+          <div id="moversAdj"></div>
         </div>
       </div>
     </div>
@@ -1599,9 +1603,11 @@
 
   // ---- Fridges to watch: biggest revenue / scrap changes between the current and previous scope ----
   function computeMovers(scopePeriods, prevPeriods, store, hasCost){
-    if(!prevPeriods.length) return { revenue: [], scrap: [] };
+    if(!prevPeriods.length) return { revenue: [], scrap: [], adj: [] };
     const scrapField = hasCost ? 'scrapValue' : 'scrap';
-    const revItems = [], scrapItems = [];
+    const adjPosField = hasCost ? 'adjPosValue' : 'adjPos';
+    const adjNegField = hasCost ? 'adjNegValue' : 'adjNeg';
+    const revItems = [], scrapItems = [], adjItems = [];
     ALL_WAREHOUSES.forEach(wh => {
       const curRev = sumField(scopePeriods, store, wh, 'revenue');
       const prevRev = sumField(prevPeriods, store, wh, 'revenue');
@@ -1610,10 +1616,16 @@
       const curScrap = sumField(scopePeriods, store, wh, scrapField);
       const prevScrap = sumField(prevPeriods, store, wh, scrapField);
       if(curScrap || prevScrap) scrapItems.push({ wh, delta: curScrap-prevScrap });
+
+      // Net stock loss = negative adjustments minus positive ones; delta > 0 = losing more.
+      const curLoss = sumField(scopePeriods, store, wh, adjNegField) - sumField(scopePeriods, store, wh, adjPosField);
+      const prevLoss = sumField(prevPeriods, store, wh, adjNegField) - sumField(prevPeriods, store, wh, adjPosField);
+      if(curLoss || prevLoss) adjItems.push({ wh, delta: curLoss-prevLoss });
     });
     revItems.sort((a,b)=>Math.abs(b.delta)-Math.abs(a.delta));
     scrapItems.sort((a,b)=>Math.abs(b.delta)-Math.abs(a.delta));
-    return { revenue: revItems.slice(0,8), scrap: scrapItems.slice(0,8) };
+    adjItems.sort((a,b)=>Math.abs(b.delta)-Math.abs(a.delta));
+    return { revenue: revItems.slice(0,8), scrap: scrapItems.slice(0,8), adj: adjItems.slice(0,8) };
   }
 
   function renderMoversList(containerId, items, fmtFn, goodIfUp){
@@ -1850,6 +1862,7 @@
     const movers = computeMovers(scopePeriods, moverPrev, store, hasCost);
     renderMoversList('moversRevenue', movers.revenue, fmtEUR, true);
     renderMoversList('moversScrap', movers.scrap, hasCost ? fmtEUR : (n => fmtNum(n) + ' u.'), false);
+    renderMoversList('moversAdj', movers.adj, hasCost ? fmtEUR : (n => fmtNum(n) + ' u.'), false);
 
     // ---- Quick-read summary banner ----
     renderInsightBanner(cur, prevTotals, flags, scopeText);
