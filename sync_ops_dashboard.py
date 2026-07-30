@@ -201,10 +201,12 @@ def sync_warehouses(odoo, sb, now_iso):
     return stock_loc_to_wh
 
 
-def sync_sales(odoo, sb, since, now_iso):
-    log(f'Syncing sales order lines since {since}...')
+def sync_sales(odoo, sb, since, now_iso, until=None):
+    log(f'Syncing sales order lines since {since}' + (f' until {until}' if until else '') + '...')
     domain = [('order_id.date_order', '>=', since),
               ('order_id.state', 'in', ['sale', 'done'])]
+    if until:
+        domain.append(('order_id.date_order', '<', until))
     lines = odoo.read_all('sale.order.line', domain,
                           ['order_id', 'product_id', 'qty_delivered', 'price_unit',
                            'discount', 'price_subtotal', 'price_total'])
@@ -240,8 +242,8 @@ def sync_sales(odoo, sb, since, now_iso):
     return len(out)
 
 
-def sync_stock_moves(odoo, sb, since, now_iso, stock_loc_to_wh):
-    log(f'Syncing stock moves since {since}...')
+def sync_stock_moves(odoo, sb, since, now_iso, stock_loc_to_wh, until=None):
+    log(f'Syncing stock moves since {since}' + (f' until {until}' if until else '') + '...')
     inv_locs = odoo.call('stock.location', 'search_read', [[('usage', '=', 'inventory')]],
                          fields=['scrap_location'])
     scrap_ids = [l['id'] for l in inv_locs if l.get('scrap_location')]
@@ -251,6 +253,8 @@ def sync_stock_moves(odoo, sb, since, now_iso, stock_loc_to_wh):
     fields = ['date', 'product_id', 'quantity', 'location_id', 'location_dest_id',
               'reference', 'warehouse_id']
     base = [('state', '=', 'done'), ('date', '>=', since)]
+    if until:
+        base = base + [('date', '<', until)]
     categories = [
         ('Scrap',                     base + [('location_dest_id', 'in', scrap_ids)],  'src'),
         ('Negative Stock Adjustment', base + [('location_dest_id', 'in', adj_ids)],    'src'),
@@ -291,7 +295,9 @@ def sync_stock_moves(odoo, sb, since, now_iso, stock_loc_to_wh):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--since', help='sync data from this date (YYYY-MM-DD)')
+    ap.add_argument('--until', help='sync data before this date (YYYY-MM-DD, exclusive) - for chunked backfills')
     ap.add_argument('--days', type=int, help='sync the last N days (for scheduled runs)')
+    ap.add_argument('--no-refresh', action='store_true', help='skip the rollup refresh (refresh once after the last chunk)')
     ap.add_argument('--dry-run', action='store_true')
     args = ap.parse_args()
     if not args.since and not args.days:
@@ -306,11 +312,14 @@ def main():
 
     n_products = sync_products(odoo, sb, now_iso)
     stock_loc_to_wh = sync_warehouses(odoo, sb, now_iso)
-    n_sales = sync_sales(odoo, sb, since, now_iso)
-    n_moves = sync_stock_moves(odoo, sb, since, now_iso, stock_loc_to_wh)
+    n_sales = sync_sales(odoo, sb, since, now_iso, args.until)
+    n_moves = sync_stock_moves(odoo, sb, since, now_iso, stock_loc_to_wh, args.until)
 
-    log('Refreshing ops_rollup materialized view...')
-    sb.rpc('refresh_ops_rollup')
+    if args.no_refresh:
+        log('Skipping rollup refresh (--no-refresh)')
+    else:
+        log('Refreshing ops_rollup materialized view...')
+        sb.rpc('refresh_ops_rollup')
     log(f'Done. products={n_products} sales_lines={n_sales} stock_moves={n_moves}')
 
 
