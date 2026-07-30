@@ -341,6 +341,51 @@
   }
   .movers-empty{color:var(--ink-soft);font-size:13px;padding:6px 4px;}
 
+  /* ---------- Calendar range picker ---------- */
+  .cal-picker{position:relative;}
+  .cal-btn{
+    font-family:'Inter';font-size:13px;font-weight:500;color:var(--ink);
+    background:var(--surface);border:1px solid var(--line);border-radius:10px;
+    padding:8px 12px;cursor:pointer;display:flex;align-items:center;gap:8px;white-space:nowrap;
+  }
+  .cal-btn:hover{border-color:var(--teal);}
+  .cal-btn .cal-ico{font-size:14px;line-height:1;}
+  .cal-panel{
+    display:none;position:absolute;left:0;top:calc(100% + 8px);z-index:30;
+    background:var(--surface);border:1px solid var(--line);border-radius:16px;
+    box-shadow:0 12px 36px rgba(21,34,39,0.16);padding:16px;
+  }
+  .cal-picker.open .cal-panel{display:flex;gap:18px;}
+  .cal-presets{display:flex;flex-direction:column;gap:2px;min-width:130px;padding-right:14px;border-right:1px solid var(--line);}
+  .cal-presets button{
+    text-align:left;font-family:'Inter';font-size:13.5px;font-weight:500;color:var(--ink);
+    background:transparent;border:none;border-radius:8px;padding:8px 10px;cursor:pointer;
+  }
+  .cal-presets button:hover{background:var(--teal-pale);}
+  .cal-months{display:flex;gap:22px;}
+  .cal-month{width:238px;}
+  .cal-month-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:6px;}
+  .cal-month-head .cal-title{font-family:'Inter';font-weight:600;font-size:13.5px;display:flex;gap:6px;}
+  .cal-month-head .cal-title span{background:var(--bg);border-radius:7px;padding:3px 8px;}
+  .cal-nav{
+    background:transparent;border:none;font-size:15px;cursor:pointer;color:var(--ink);
+    border-radius:7px;padding:2px 8px;
+  }
+  .cal-nav:hover{background:var(--teal-pale);}
+  .cal-grid{display:grid;grid-template-columns:repeat(7,34px);}
+  .cal-grid .dow{font-size:11px;font-weight:600;color:var(--ink-soft);text-align:center;padding:4px 0;}
+  .cal-day{
+    font-family:'Inter';font-size:12.5px;text-align:center;padding:7px 0;cursor:pointer;
+    border:none;background:transparent;color:var(--ink);
+  }
+  .cal-day.other{color:#C3CDD0;}
+  .cal-day:hover{background:var(--teal-pale);border-radius:8px;}
+  .cal-day.in-range{background:#F0EBE4;}
+  .cal-day.edge{background:#2A1F14;color:#fff;border-radius:9px;font-weight:600;}
+  .cal-day.range-start{border-radius:9px 0 0 9px;}
+  .cal-day.range-end{border-radius:0 9px 9px 0;}
+  .cal-day.range-start.range-end{border-radius:9px;}
+
   /* ---------- Login screen ---------- */
   #loginScreen{
     display:none;flex-direction:column;align-items:center;justify-content:center;
@@ -362,7 +407,7 @@
   }
 
   @media print{
-    #uploadScreen, .controls .seg, #scopeSelect, .file-status button, .period-picker,
+    #uploadScreen, .controls .seg, .cal-picker, #compareSelect, .file-status button,
     .threshold-input, footer.note{ display:none !important; }
     body{background:#fff;}
     .chart-card{break-inside:avoid;}
@@ -426,6 +471,7 @@
     <div id="opsView">
     <div class="controls">
       <div class="seg" id="granSeg">
+        <button data-gran="day">Day</button>
         <button data-gran="week" class="active">Week</button>
         <button data-gran="month">Month</button>
       </div>
@@ -436,21 +482,17 @@
       </div>
       <select id="warehouseSelect"></select>
       <select id="categorySelect"></select>
-      <select id="scopeSelect">
-        <option value="1">Latest period</option>
-        <option value="4">Last 4 periods</option>
-        <option value="8">Last 8 periods</option>
-        <option value="13">Last 13 periods</option>
-        <option value="all">All periods</option>
-        <option value="custom">Choose a specific period…</option>
+      <div id="mainRangePicker"></div>
+      <select id="compareSelect">
+        <option value="off">No comparison</option>
+        <option value="prev">vs previous period</option>
+        <option value="yoy">vs same period last year</option>
+        <option value="custom">vs custom period…</option>
       </select>
-      <select id="customPeriodSelect" style="display:none;"></select>
-      <label class="ongoing-toggle"><input type="checkbox" id="excludeOngoing" checked /> Exclude in-progress period</label>
+      <div id="compareRangePicker" style="display:none;"></div>
       <div class="spacer"></div>
       <span class="file-status" id="rangeLabel"></span>
     </div>
-
-    <div class="ongoing-notice" id="ongoingNotice" style="display:none;"></div>
 
     <div class="insight-banner" id="insightBanner"></div>
 
@@ -505,8 +547,7 @@
     <div class="chart-grid">
       <div class="chart-card full">
         <div class="card-head">
-          <h3>Revenue over time <span style="font-weight:400;font-size:12px;color:var(--ink-soft);">(range also applies to Scrap % and Adjustments % below)</span></h3>
-          <div id="trendPeriodPicker" class="period-picker"></div>
+          <h3>Revenue over time <span id="revCompareLegend" style="font-weight:400;font-size:12px;color:var(--ink-soft);"></span></h3>
         </div>
         <div class="wrap"><div id="chartRevenue" class="chart-svg"></div></div>
       </div>
@@ -526,8 +567,7 @@
       </div>
       <div class="chart-card full">
         <div class="card-head">
-          <h3>Top fridges by revenue</h3>
-          <div id="topPeriodPicker" class="period-picker"></div>
+          <h3>Top fridges by revenue <span id="topScope" style="font-weight:400;font-size:12px;color:var(--ink-soft);"></span></h3>
         </div>
         <div class="wrap" style="height:320px;"><div id="chartTopWarehouses" class="chart-svg"></div></div>
       </div>
@@ -1131,6 +1171,7 @@
           fileStatusText.textContent = 'Filtering…';
           try{
             await loadFromSupabase({ categoryChangeOnly: true });
+            resetDayCache(); // day rollup is fetched per category server-side
             fileStatusText.textContent = supabaseStatusText();
             renderAll();
           }catch(err){
@@ -1164,13 +1205,11 @@
     renderAll();
   });
 
-  document.getElementById('scopeSelect').addEventListener('change', () => {
-    document.getElementById('customPeriodSelect').style.display =
-      document.getElementById('scopeSelect').value === 'custom' ? '' : 'none';
+  document.getElementById('compareSelect').addEventListener('change', () => {
+    document.getElementById('compareRangePicker').style.display =
+      document.getElementById('compareSelect').value === 'custom' ? '' : 'none';
     renderAll();
   });
-  document.getElementById('customPeriodSelect').addEventListener('change', renderAll);
-  document.getElementById('excludeOngoing').addEventListener('change', renderAll);
   document.getElementById('scrapTarget').addEventListener('input', renderAll);
   document.getElementById('adjTarget').addEventListener('input', renderAll);
   document.getElementById('exportBtn').addEventListener('click', () => window.print());
@@ -1206,50 +1245,68 @@
     return periodEndDate(pKey, gran).getTime() < Date.now();
   }
 
-  // Drops the last period from the list if it's still in progress and the "exclude ongoing"
-  // toggle is checked — so "Latest period" etc. resolve to the last COMPLETE period by default.
-  function getEffectivePeriods(periods, gran){
-    if(!document.getElementById('excludeOngoing').checked) return periods;
-    if(periods.length && !isPeriodComplete(periods[periods.length-1], gran)) return periods.slice(0,-1);
-    return periods;
+  // ---------- Date-range machinery ----------
+  // A "range" is {start: Date, end: Date}, local dates, both inclusive.
+  function startOfDay(d){ const x = new Date(d); x.setHours(0,0,0,0); return x; }
+  function addDays(d, n){ const x = new Date(d); x.setDate(x.getDate()+n); return x; }
+  function dayKey(d){ return d.getFullYear()*10000 + (d.getMonth()+1)*100 + d.getDate(); }
+  function daysBetween(a, b){ return Math.round((startOfDay(b) - startOfDay(a)) / 86400000); }
+  function fmtRange(r){
+    const o = { day:'numeric', month:'short' };
+    const oy = { day:'numeric', month:'short', year:'numeric' };
+    if(r.start.getFullYear() === r.end.getFullYear())
+      return r.start.toLocaleDateString('en-GB', o) + ' – ' + r.end.toLocaleDateString('en-GB', oy);
+    return r.start.toLocaleDateString('en-GB', oy) + ' – ' + r.end.toLocaleDateString('en-GB', oy);
   }
 
-  function populateCustomPeriodSelect(periods, store, gran){
-    const sel = document.getElementById('customPeriodSelect');
-    const prevVal = sel.value;
-    sel.innerHTML = '';
-    periods.slice().reverse().forEach(p => {
-      const opt = document.createElement('option');
-      opt.value = p;
-      opt.textContent = store.get(p).label + (isPeriodComplete(p, gran) ? '' : ' (in progress)');
-      sel.appendChild(opt);
-    });
-    if(prevVal && periods.includes(Number(prevVal))) sel.value = prevVal;
-  }
+  let mainRange = { start: new Date(new Date().getFullYear(), new Date().getMonth(), 1), end: startOfDay(new Date()) };
+  let compareRange = null; // set by deriveCompareRange()
 
-  // ---- Scope: which periods count as "current" for KPIs/margin/anomalies/movers, and
-  // which equal-length window immediately before them is "previous" for WoW-style deltas.
-  // "periods" is the FULL list (so "Choose a specific period…" can target any period, including
-  // an in-progress one deliberately); "basePeriods" has the in-progress period already stripped
-  // out when the exclude-ongoing toggle is on, and is what the rolling-window options use. ----
-  function getScopePeriods(periods, basePeriods){
-    const raw = document.getElementById('scopeSelect').value;
-    if(raw === 'custom'){
-      const customKey = Number(document.getElementById('customPeriodSelect').value);
-      const idx = periods.indexOf(customKey);
-      if(idx === -1) return { scope: [], prev: [] };
-      return { scope: [periods[idx]], prev: idx>0 ? [periods[idx-1]] : [] };
+  // Distinct period keys (current granularity) covered by a date range, in order.
+  function rangeToKeys(range, gran){
+    const keys = [];
+    const seen = new Set();
+    for(let d = startOfDay(range.start); d <= range.end; d = addDays(d, 1)){
+      const k = gran === 'day' ? dayKey(d) : (gran === 'week' ? weekKey(d) : monthKey(d));
+      if(!seen.has(k)){ seen.add(k); keys.push(k); }
     }
-    if(raw === 'all') return { scope: basePeriods, prev: [] };
-    const n = Math.min(parseInt(raw, 10) || 1, basePeriods.length);
-    const scope = basePeriods.slice(-n);
-    const startIdx = basePeriods.length - scope.length;
-    const prev = basePeriods.slice(Math.max(0, startIdx - n), startIdx);
-    return { scope, prev };
+    return keys;
   }
+
+  function deriveCompareRange(){
+    const mode = document.getElementById('compareSelect').value;
+    if(mode === 'off') return null;
+    if(mode === 'prev'){
+      const len = daysBetween(mainRange.start, mainRange.end);
+      const end = addDays(mainRange.start, -1);
+      return { start: addDays(end, -len), end };
+    }
+    if(mode === 'yoy'){
+      const s = new Date(mainRange.start), e = new Date(mainRange.end);
+      s.setFullYear(s.getFullYear()-1); e.setFullYear(e.getFullYear()-1);
+      return { start: s, end: e };
+    }
+    return customCompareRange; // 'custom'
+  }
+
+  // ---- Day-granularity store: fetched on demand (full-history day rollup would be huge).
+  // Fetched day keys are cached; only missing spans hit the network.
+  const DAY = { store: new Map(), fetchedFrom: null, fetchedTo: null };
+  async function ensureDayData(fromKey, toKey){
+    if(DATA_SOURCE !== 'supabase') return;
+    if(DAY.fetchedFrom !== null && fromKey >= DAY.fetchedFrom && toKey <= DAY.fetchedTo) return;
+    const from = DAY.fetchedFrom === null ? fromKey : Math.min(fromKey, DAY.fetchedFrom);
+    const to = DAY.fetchedTo === null ? toKey : Math.max(toKey, DAY.fetchedTo);
+    const category = currentCategoryFilter === '__ALL__' ? null : currentCategoryFilter;
+    const rows = await rpc('get_ops_rollup', { p_granularity:'day', p_category:category, p_from:from, p_to:to });
+    const fresh = rollupToStore(rows);
+    for(const [k, v] of fresh) DAY.store.set(k, v);
+    DAY.fetchedFrom = from; DAY.fetchedTo = to;
+  }
+  function resetDayCache(){ DAY.store.clear(); DAY.fetchedFrom = null; DAY.fetchedTo = null; }
 
   function sumField(periodList, store, wh, field){
-    return periodList.reduce((a,p)=> a + ((store.get(p).warehouses.get(wh)||{})[field]||0), 0);
+    return periodList.reduce((a,p)=> a + (((store.get(p)||{warehouses:new Map()}).warehouses.get(wh)||{})[field]||0), 0);
   }
 
   // Computes the same Revenue/Units/Scrap/Adjustments totals used by the KPI row, for any
@@ -1319,7 +1376,7 @@
   function renderKpiDelta(elId, curVal, prevVal, fmtFn, goodIfUp){
     const el = document.getElementById(elId);
     if(prevVal === null || prevVal === undefined){
-      el.textContent = 'No comparable previous period yet';
+      el.textContent = '';
       return;
     }
     const diff = curVal - prevVal;
@@ -1328,17 +1385,146 @@
     const arrow = diff > 0 ? '▲' : (diff < 0 ? '▼' : '▬');
     const cls = diff === 0 ? '' : (isGood ? 'pos' : 'neg');
     const pctText = pctChange !== null ? ' (' + (pctChange>=0?'+':'') + pctChange.toFixed(1) + '%)' : '';
-    el.innerHTML = '<span class="'+cls+'"><span class="arrow">'+arrow+'</span>'+(diff>=0?'+':'−')+fmtFn(Math.abs(diff))+pctText+'</span> vs previous period';
+    el.innerHTML = '<span class="'+cls+'"><span class="arrow">'+arrow+'</span>'+(diff>=0?'+':'−')+fmtFn(Math.abs(diff))+pctText+'</span> ' + (compareLabelText || 'vs comparison');
   }
-
-  let selectedTopPeriods = new Set();
-  let selectedTrendPeriods = new Set();
+  let compareLabelText = '';
 
   document.addEventListener('click', (e) => {
-    document.querySelectorAll('.period-picker.open').forEach(picker => {
+    document.querySelectorAll('.cal-picker.open').forEach(picker => {
       if(!picker.contains(e.target)) picker.classList.remove('open');
     });
   });
+
+  // ---------- Calendar range picker (dual month + presets) ----------
+  let customCompareRange = null;
+  const COMPARE_GREY = '#C9D2D4';
+
+  function createRangePicker(containerId, getRange, setRange, presets){
+    const container = document.getElementById(containerId);
+    container.className = 'cal-picker';
+    let viewYear, viewMonth; // left month of the two shown
+
+    const btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'cal-btn';
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      document.querySelectorAll('.cal-picker.open').forEach(p => { if(p!==container) p.classList.remove('open'); });
+      const r = getRange();
+      viewYear = r ? r.start.getFullYear() : new Date().getFullYear();
+      viewMonth = r ? r.start.getMonth() : new Date().getMonth();
+      container.classList.toggle('open');
+      if(container.classList.contains('open')) renderPanel();
+    });
+    container.appendChild(btn);
+
+    const panel = document.createElement('div');
+    panel.className = 'cal-panel';
+    panel.addEventListener('click', e => e.stopPropagation());
+    container.appendChild(panel);
+
+    let picking = null; // first click of a new range
+
+    function updateBtn(){
+      const r = getRange();
+      btn.innerHTML = '<span class="cal-ico">📅</span>' + (r ? fmtRange(r) : 'Pick a period');
+    }
+
+    function commit(start, end){
+      setRange({ start: startOfDay(start), end: startOfDay(end) });
+      picking = null;
+      updateBtn();
+      container.classList.remove('open');
+      renderAll();
+    }
+
+    function renderMonth(y, m){
+      const wrap = document.createElement('div');
+      wrap.className = 'cal-month';
+      const head = document.createElement('div');
+      head.className = 'cal-month-head';
+      const monthName = new Date(y, m, 1).toLocaleDateString('en-GB', { month:'long' });
+      head.innerHTML = '<div class="cal-title"><span>'+monthName+'</span><span>'+y+'</span></div>';
+      wrap.appendChild(head);
+
+      const grid = document.createElement('div');
+      grid.className = 'cal-grid';
+      ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].forEach(d => {
+        const el = document.createElement('div'); el.className='dow'; el.textContent=d; grid.appendChild(el);
+      });
+      const first = new Date(y, m, 1);
+      const lead = (first.getDay()+6)%7;
+      const gridStart = addDays(first, -lead);
+      const r = getRange();
+      for(let i=0;i<42;i++){
+        const d = addDays(gridStart, i);
+        const cell = document.createElement('button');
+        cell.type='button'; cell.className='cal-day'; cell.textContent = d.getDate();
+        if(d.getMonth() !== m) cell.classList.add('other');
+        if(picking && +startOfDay(d) === +picking) cell.classList.add('edge');
+        if(!picking && r && d >= startOfDay(r.start) && d <= startOfDay(r.end)){
+          cell.classList.add('in-range');
+          if(+startOfDay(d) === +startOfDay(r.start)) cell.classList.add('edge','range-start');
+          if(+startOfDay(d) === +startOfDay(r.end)) cell.classList.add('edge','range-end');
+        }
+        cell.addEventListener('click', () => {
+          if(!picking){ picking = startOfDay(d); renderPanel(); }
+          else{
+            const a = picking, b = startOfDay(d);
+            commit(a <= b ? a : b, a <= b ? b : a);
+          }
+        });
+        grid.appendChild(cell);
+      }
+      wrap.appendChild(grid);
+      return { wrap, head };
+    }
+
+    function renderPanel(){
+      clearNode(panel);
+      const presetCol = document.createElement('div');
+      presetCol.className = 'cal-presets';
+      presets.forEach(p => {
+        const b = document.createElement('button');
+        b.type='button'; b.textContent = p.label;
+        b.addEventListener('click', () => { const r = p.range(); commit(r.start, r.end); });
+        presetCol.appendChild(b);
+      });
+      panel.appendChild(presetCol);
+
+      const months = document.createElement('div');
+      months.className = 'cal-months';
+      const m1 = renderMonth(viewYear, viewMonth);
+      const nextM = viewMonth === 11 ? { y:viewYear+1, m:0 } : { y:viewYear, m:viewMonth+1 };
+      const m2 = renderMonth(nextM.y, nextM.m);
+      const back = document.createElement('button');
+      back.type='button'; back.className='cal-nav'; back.textContent='←';
+      back.addEventListener('click', () => { viewMonth--; if(viewMonth<0){viewMonth=11;viewYear--;} renderPanel(); });
+      m1.head.insertBefore(back, m1.head.firstChild);
+      const fwd = document.createElement('button');
+      fwd.type='button'; fwd.className='cal-nav'; fwd.textContent='→';
+      fwd.addEventListener('click', () => { viewMonth++; if(viewMonth>11){viewMonth=0;viewYear++;} renderPanel(); });
+      m2.head.appendChild(fwd);
+      months.appendChild(m1.wrap);
+      months.appendChild(m2.wrap);
+      panel.appendChild(months);
+    }
+
+    updateBtn();
+    return { updateBtn };
+  }
+
+  const today = () => startOfDay(new Date());
+  const MAIN_PRESETS = [
+    { label:'Today', range: () => ({ start: today(), end: today() }) },
+    { label:'This week', range: () => { const t=today(); const mon=addDays(t, -((t.getDay()+6)%7)); return { start:mon, end:t }; } },
+    { label:'This month', range: () => ({ start: new Date(today().getFullYear(), today().getMonth(), 1), end: today() }) },
+    { label:'Last month', range: () => { const t=today(); return { start:new Date(t.getFullYear(), t.getMonth()-1, 1), end:new Date(t.getFullYear(), t.getMonth(), 0) }; } },
+    { label:'Last 3 months', range: () => ({ start: addDays(today(), -90), end: today() }) },
+    { label:'This year', range: () => ({ start: new Date(today().getFullYear(),0,1), end: today() }) },
+  ];
+
+  createRangePicker('mainRangePicker', () => mainRange, r => { mainRange = r; }, MAIN_PRESETS);
+  createRangePicker('compareRangePicker', () => customCompareRange, r => { customCompareRange = r; }, MAIN_PRESETS);
 
   // ---- Needs attention: flags fridges whose latest period looks off vs their own recent history ----
   function computeAnomalies(periods, store, whScope, hasCost){
@@ -1468,21 +1654,50 @@
     const scrapUp = cur.totScrap > prev.totScrap;
     const parts = [];
     parts.push('<b>' + scopeText + '</b>: Revenue ' + fmtEUR(cur.totRevenue) +
-      (revDelta!==null ? (revDelta>=0 ? ', up ' : ', down ') + Math.abs(revDelta).toFixed(1) + '% vs previous period' : '') + '.');
-    parts.push((scrapUp ? 'Scrap increased' : 'Scrap decreased') + ' vs the previous period.');
+      (revDelta!==null ? (revDelta>=0 ? ', up ' : ', down ') + Math.abs(revDelta).toFixed(1) + '% vs the comparison period' : '') + '.');
+    parts.push((scrapUp ? 'Scrap increased' : 'Scrap decreased') + ' vs the comparison period.');
     parts.push(flags.length ? (flags.length + ' fridge(s) flagged for review below.') : 'No fridges flagged for review this period.');
     banner.innerHTML = parts.join(' ');
     banner.classList.add('show');
   }
 
-  function renderAll(){
+  let renderSeq = 0;
+  async function renderAll(){
+    const seq = ++renderSeq;
     const gran = currentGran;
-    const store = AGG[gran];
-    const periods = ALL_PERIODS[gran];
     const selectedWh = document.getElementById('warehouseSelect').value || '__ALL__';
 
+    // Day granularity comes from Supabase only (the xlsx path builds week/month client-side).
+    document.querySelector('#granSeg button[data-gran="day"]').style.display =
+      DATA_SOURCE === 'supabase' ? '' : 'none';
+
+    compareRange = deriveCompareRange();
+    compareLabelText = compareRange ? 'vs ' + fmtRange(compareRange) : '';
+
+    if(gran === 'day'){
+      let from = dayKey(mainRange.start), to = dayKey(mainRange.end);
+      if(compareRange){ from = Math.min(from, dayKey(compareRange.start)); to = Math.max(to, dayKey(compareRange.end)); }
+      try{ await ensureDayData(from, to); }
+      catch(err){ console.error(err); }
+      if(seq !== renderSeq) return; // superseded by a newer render
+    }
+    const store = gran === 'day' ? DAY.store : AGG[gran];
+
+    const scopePeriods = rangeToKeys(mainRange, gran);
+    const prevPeriods = compareRange ? rangeToKeys(compareRange, gran) : [];
+    const scopeText = fmtRange(mainRange);
     document.getElementById('rangeLabel').textContent =
-      periods.length ? (store.get(periods[0]).label + ' → ' + store.get(periods[periods.length-1]).label) : '';
+      scopeText + (compareRange ? '  vs  ' + fmtRange(compareRange) : '');
+
+    const labelFor = k => {
+      const e = store.get(k);
+      if(e) return e.label;
+      if(gran === 'day'){
+        const d = new Date(Math.floor(k/10000), Math.floor(k/100)%100 - 1, k%100);
+        return d.toLocaleDateString('en-GB', { day:'numeric', month:'short' });
+      }
+      return periodLabelFromKey(k, gran);
+    };
 
     const hasCost = HAS_COST;
     const mode = currentValueMode; // 'units' | 'eur' | 'percent'
@@ -1491,71 +1706,33 @@
     // Percent basis: relative to revenue (€) when cost data is available, otherwise relative to units sold.
     const percentBasis = hasCost ? 'value' : 'units';
 
-    const labels = periods.map(p => store.get(p).label);
-    const revSeries = periods.map(p => (store.get(p).warehouses.get(selectedWh) || {}).revenue || 0);
-    const unitsSeries = periods.map(p => (store.get(p).warehouses.get(selectedWh) || {}).units || 0);
-
-    // ---- Trend charts for Scrap and Stock Adjustments are ALWAYS shown as % of sales ----
-    const denomSeries = percentBasis === 'value' ? revSeries : unitsSeries;
     const scrapValField = percentBasis === 'value' ? 'scrapValue' : 'scrap';
     const adjPosValField = percentBasis === 'value' ? 'adjPosValue' : 'adjPos';
     const adjNegValField = percentBasis === 'value' ? 'adjNegValue' : 'adjNeg';
 
-    const scrapPctSeries = periods.map((p,i) => {
-      const v = (store.get(p).warehouses.get(selectedWh) || {})[scrapValField] || 0;
-      return denomSeries[i] ? (v/denomSeries[i]*100) : 0;
-    });
-    const adjNetPctSeries = periods.map((p,i) => {
-      const vals = store.get(p).warehouses.get(selectedWh) || {};
-      const net = (vals[adjPosValField]||0) - (vals[adjNegValField]||0);
-      return denomSeries[i] ? (net/denomSeries[i]*100) : 0;
+    const valsAt = k => ((store.get(k) || { warehouses:new Map() }).warehouses.get(selectedWh) || {});
+    const seriesOf = (keys, field) => keys.map(k => valsAt(k)[field] || 0);
+    const pctSeries = (keys, numFn) => keys.map(k => {
+      const v = valsAt(k);
+      const denom = percentBasis === 'value' ? (v.revenue||0) : (v.units||0);
+      return denom ? (numFn(v)/denom*100) : 0;
     });
 
-    // ---- Trend charts (Revenue / Scrap% / Adj%) only show the periods picked in the trend
-    // period picker, so the x-axis stays readable as more weeks/months accumulate over time.
-    // KPI totals and margin above are unaffected — they always use the FULL period range.
-    populateTrendPeriodPicker(periods, store);
-    const trendPeriods = periods.filter(p => selectedTrendPeriods.has(p));
-    const trendLabels = trendPeriods.map(p => store.get(p).label);
-    const trendRevSeries = trendPeriods.map(p => (store.get(p).warehouses.get(selectedWh) || {}).revenue || 0);
-    const trendUnitsSeries = trendPeriods.map(p => (store.get(p).warehouses.get(selectedWh) || {}).units || 0);
-    const trendDenomSeries = percentBasis === 'value' ? trendRevSeries : trendUnitsSeries;
-    const trendScrapPctSeries = trendPeriods.map((p,i) => {
-      const v = (store.get(p).warehouses.get(selectedWh) || {})[scrapValField] || 0;
-      return trendDenomSeries[i] ? (v/trendDenomSeries[i]*100) : 0;
-    });
-    const trendAdjNetPctSeries = trendPeriods.map((p,i) => {
-      const vals = store.get(p).warehouses.get(selectedWh) || {};
-      const net = (vals[adjPosValField]||0) - (vals[adjNegValField]||0);
-      return trendDenomSeries[i] ? (net/trendDenomSeries[i]*100) : 0;
-    });
+    const trendLabels = scopePeriods.map(labelFor);
+    const trendRevSeries = seriesOf(scopePeriods, 'revenue');
+    const trendScrapPctSeries = pctSeries(scopePeriods, v => v[scrapValField]||0);
+    const trendAdjNetPctSeries = pctSeries(scopePeriods, v => (v[adjPosValField]||0) - (v[adjNegValField]||0));
 
-    // ---- Ongoing period detection: if the last period in the file isn't over yet (e.g. it's
-    // Wednesday and we're looking at the current week), exclude it from WoW-style comparisons
-    // by default, so "Latest period" resolves to the last COMPLETE period rather than a
-    // partial one that would look artificially low. Also lets the user pick ANY specific
-    // period directly via "Choose a specific period…", bypassing the rolling-window options. ----
-    populateCustomPeriodSelect(periods, store, gran);
-    document.getElementById('customPeriodSelect').style.display =
-      document.getElementById('scopeSelect').value === 'custom' ? '' : 'none';
-
-    const basePeriods = getEffectivePeriods(periods, gran);
-    const lastPeriod = periods[periods.length-1];
-    const ongoingNotice = document.getElementById('ongoingNotice');
-    if(lastPeriod !== undefined && !isPeriodComplete(lastPeriod, gran)){
-      ongoingNotice.style.display = '';
-      ongoingNotice.textContent = '⏳ ' + store.get(lastPeriod).label + ' is still in progress (data only through today), so its numbers will look lower than a full period. ' +
-        (document.getElementById('excludeOngoing').checked
-          ? 'It is excluded from the KPI, margin, anomaly and "fridges to watch" comparisons below — the trend charts and "Top fridges" still include it for context.'
-          : 'It is currently INCLUDED in the comparisons below — uncheck the box above to exclude it.');
-    }else{
-      ongoingNotice.style.display = 'none';
+    // Comparison series aligned by bucket index (1st period vs 1st period, ...).
+    const alignTo = (main, comp) => main.map((_,i) => comp[i] || 0);
+    let compRevSeries = null, compScrapPctSeries = null, compAdjNetPctSeries = null;
+    if(prevPeriods.length){
+      compRevSeries = alignTo(trendRevSeries, seriesOf(prevPeriods, 'revenue'));
+      compScrapPctSeries = alignTo(trendScrapPctSeries, pctSeries(prevPeriods, v => v[scrapValField]||0));
+      compAdjNetPctSeries = alignTo(trendAdjNetPctSeries, pctSeries(prevPeriods, v => (v[adjPosValField]||0) - (v[adjNegValField]||0)));
     }
-
-    // ---- Scope: which periods are "current" for KPIs/margin/anomalies/movers, and the
-    // equal-length window right before them, used for WoW-style deltas ----
-    const { scope: scopePeriods, prev: prevPeriods } = getScopePeriods(periods, basePeriods);
-    const scopeText = scopeLabelText(scopePeriods, store);
+    document.getElementById('revCompareLegend').textContent =
+      compareRange ? '(grey: ' + fmtRange(compareRange) + ')' : '';
 
     // ---- KPI values follow the Units / € / % toggle ----
     const cur = computeKpiTotals(scopePeriods, store, selectedWh, mode, hasCost, percentBasis);
@@ -1580,10 +1757,8 @@
     renderKpiDelta('kpiScrapDelta', cur.totScrap, prevTotals && prevTotals.totScrap, fmt, false);
     renderKpiDelta('kpiAdjDelta', cur.netAdj, prevTotals && prevTotals.netAdj, fmt, true);
 
-    // ---- Sparklines: last up to 12 COMPLETE periods (same ongoing-exclusion as the scope
-    // above), just to give quick "is this a blip or a trend" context inside each KPI card ----
-    const sparkPeriods = basePeriods.slice(-12);
-    const sparkTotals = sparkPeriods.map(p => computeKpiTotals([p], store, selectedWh, mode, hasCost, percentBasis));
+    // ---- Sparklines: the selected range itself, one point per period ----
+    const sparkTotals = scopePeriods.map(p => computeKpiTotals([p], store, selectedWh, mode, hasCost, percentBasis));
     renderSparkline('sparkRevenue', sparkTotals.map(t=>t.totRevenue), getVar('--teal'));
     renderSparkline('sparkUnits', sparkTotals.map(t=>t.totUnits), getVar('--teal-dark'));
     renderSparkline('sparkScrap', sparkTotals.map(t=>t.totScrap), getVar('--amber'));
@@ -1626,32 +1801,52 @@
     const scrapTargetVal = parseFloat(document.getElementById('scrapTarget').value);
     const adjTargetVal = parseFloat(document.getElementById('adjTarget').value);
 
-    drawLineBar('chartRevenue', trendLabels, [{ label:'Revenue (€)', data: trendRevSeries, color: getVar('--teal') }],
-      { yFormat: v => fmtEUR(v), tooltipFormat: v => fmtEUR(v) });
+    // Comparison series render behind the main series in a light grey.
+    const withCompare = (mainDs, compData, compLabel) =>
+      compData ? [{ label: compLabel, data: compData, color: COMPARE_GREY }, mainDs] : [mainDs];
 
-    drawLineBar('chartScrap', trendLabels, [{ label:'Scrap (% of sales)', data: trendScrapPctSeries, color: getVar('--amber') }],
-      { yFormat: v => fmtPct(v), tooltipFormat: v => fmtPct(v),
+    drawLineBar('chartRevenue', trendLabels,
+      withCompare({ label:'Revenue (€)', data: trendRevSeries, color: getVar('--teal') }, compRevSeries, 'Comparison (€)'),
+      { yFormat: v => fmtEUR(v), tooltipFormat: v => fmtEUR(v), grouped: !!compRevSeries, legend: !!compRevSeries, valueLabels: !compRevSeries });
+
+    drawLineBar('chartScrap', trendLabels,
+      withCompare({ label:'Scrap (% of sales)', data: trendScrapPctSeries, color: getVar('--amber') }, compScrapPctSeries, 'Comparison'),
+      { yFormat: v => fmtPct(v), tooltipFormat: v => fmtPct(v), grouped: !!compScrapPctSeries, legend: !!compScrapPctSeries, valueLabels: !compScrapPctSeries,
         threshold: isNaN(scrapTargetVal) ? null : scrapTargetVal, thresholdFormat: v => fmtPct(v) });
 
-    drawLineBar('chartAdj', trendLabels, [{ label:'Net adjustment (% of sales)', data: trendAdjNetPctSeries, color: getVar('--teal-dark') }],
-      { yFormat: v => fmtPct(v), tooltipFormat: v => fmtPct(v),
+    drawLineBar('chartAdj', trendLabels,
+      withCompare({ label:'Net adjustment (% of sales)', data: trendAdjNetPctSeries, color: getVar('--teal-dark') }, compAdjNetPctSeries, 'Comparison'),
+      { yFormat: v => fmtPct(v), tooltipFormat: v => fmtPct(v), grouped: !!compAdjNetPctSeries, legend: !!compAdjNetPctSeries, valueLabels: !compAdjNetPctSeries,
         threshold: isNaN(adjTargetVal) ? null : adjTargetVal, thresholdFormat: v => fmtPct(v) });
 
-    populateTopPeriodPicker(periods, store);
-    drawTopWarehouses(periods, store);
+    document.getElementById('topScope').textContent = '(' + scopeText + ')';
+    drawTopWarehouses(scopePeriods, store);
 
-    // ---- Needs attention: auto-flag fridges whose latest period looks unusual vs their
-    // own recent history (always evaluated on the full period range, not the scope filter) ----
-    const flags = computeAnomalies(basePeriods, store, selectedWh, hasCost);
-    renderAnomalies(flags, scopeText);
+    // ---- Needs attention: latest complete week/month vs its own recent history —
+    // independent of the picked range; hidden at day grain (too noisy per day) ----
+    const anomalyCard = document.getElementById('anomalyCard');
+    let flags = [];
+    if(gran === 'day'){
+      anomalyCard.style.display = 'none';
+    }else{
+      anomalyCard.style.display = '';
+      let histPeriods = ALL_PERIODS[gran];
+      if(histPeriods.length && !isPeriodComplete(histPeriods[histPeriods.length-1], gran)) histPeriods = histPeriods.slice(0,-1);
+      flags = computeAnomalies(histPeriods, AGG[gran], selectedWh, hasCost);
+      renderAnomalies(flags, histPeriods.length ? AGG[gran].get(histPeriods[histPeriods.length-1]).label : '');
+    }
 
-    // ---- Fridges to watch: biggest revenue / scrap changes between the current scope and
-    // the equivalent previous window — replaces the old fridge × period matrix/list, which
-    // was rarely actionable on its own. Always in € (cost) for scrap when available. ----
-    document.getElementById('moversScope').textContent = prevPeriods.length
-      ? '(' + scopeText + ' vs previous ' + scopePeriods.length + ' period(s))'
-      : '(not enough history to compare yet)';
-    const movers = computeMovers(scopePeriods, prevPeriods, store, hasCost);
+    // ---- Fridges to watch: selected range vs the comparison range (or, with comparison
+    // off, the equal-length window immediately before the range) ----
+    let moverPrev = prevPeriods;
+    if(!moverPrev.length){
+      const len = daysBetween(mainRange.start, mainRange.end);
+      const end = addDays(mainRange.start, -1);
+      moverPrev = rangeToKeys({ start: addDays(end, -len), end }, gran);
+    }
+    document.getElementById('moversScope').textContent =
+      '(' + scopeText + ' vs ' + (compareRange ? fmtRange(compareRange) : 'preceding window') + ')';
+    const movers = computeMovers(scopePeriods, moverPrev, store, hasCost);
     renderMoversList('moversRevenue', movers.revenue, fmtEUR, true);
     renderMoversList('moversScrap', movers.scrap, hasCost ? fmtEUR : (n => fmtNum(n) + ' u.'), false);
 
@@ -1856,112 +2051,12 @@
       Object.assign({ type: labels.length > 20 ? 'line' : 'bar', valueLabels: true }, fmtOpts || {}));
   }
 
-  function ensurePeriodSelection(selectedSet, periods, defaultFn){
-    const currentKeys = new Set(periods);
-    const staleOrEmpty = selectedSet.size === 0 || [...selectedSet].some(k => !currentKeys.has(k));
-    if(staleOrEmpty){
-      const def = defaultFn(periods);
-      selectedSet.clear();
-      def.forEach(p => selectedSet.add(p));
-    }
-  }
 
-  function buildPeriodPickerUI(containerId, periods, store, selectedSet, opts){
-    opts = opts || {};
-    const container = document.getElementById(containerId);
-    const wasOpen = container.classList.contains('open');
-    clearNode(container);
-    container.className = 'period-picker' + (wasOpen ? ' open' : '');
-
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'period-picker-btn';
-    if(selectedSet.size === periods.length){
-      btn.textContent = opts.allLabel || 'All periods';
-    }else if(selectedSet.size === 0){
-      btn.textContent = 'No period selected';
-    }else if(selectedSet.size === 1){
-      btn.textContent = store.get([...selectedSet][0]).label;
-    }else{
-      btn.textContent = selectedSet.size + ' periods selected';
-    }
-    btn.addEventListener('click', e => { e.stopPropagation(); container.classList.toggle('open'); });
-    container.appendChild(btn);
-
-    const panel = document.createElement('div');
-    panel.className = 'period-picker-panel';
-
-    const actions = document.createElement('div');
-    actions.className = 'period-picker-actions';
-    const selectAllBtn = document.createElement('button');
-    selectAllBtn.type = 'button';
-    selectAllBtn.textContent = 'Select all';
-    selectAllBtn.addEventListener('click', e => { e.stopPropagation(); periods.forEach(p=>selectedSet.add(p)); renderAll(); });
-    actions.appendChild(selectAllBtn);
-    const clearBtn = document.createElement('button');
-    clearBtn.type = 'button';
-    clearBtn.textContent = 'Clear';
-    clearBtn.addEventListener('click', e => { e.stopPropagation(); selectedSet.clear(); renderAll(); });
-    actions.appendChild(clearBtn);
-    if(opts.presets){
-      opts.presets.forEach(preset => {
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.textContent = preset.label;
-        b.addEventListener('click', e => {
-          e.stopPropagation();
-          selectedSet.clear();
-          periods.slice(-preset.count).forEach(p => selectedSet.add(p));
-          renderAll();
-        });
-        actions.appendChild(b);
-      });
-    }
-    panel.appendChild(actions);
-
-    periods.forEach(p => {
-      const label = document.createElement('label');
-      label.className = 'period-picker-option';
-      const cb = document.createElement('input');
-      cb.type = 'checkbox';
-      cb.checked = selectedSet.has(p);
-      cb.addEventListener('change', () => {
-        if(cb.checked) selectedSet.add(p); else selectedSet.delete(p);
-        renderAll();
-      });
-      const span = document.createElement('span');
-      span.textContent = store.get(p).label + ((p === periods[periods.length-1] && !isPeriodComplete(p, currentGran)) ? ' (in progress)' : '');
-      label.appendChild(cb);
-      label.appendChild(span);
-      panel.appendChild(label);
-    });
-
-    container.appendChild(panel);
-  }
-
-  function populateTopPeriodPicker(periods, store){
-    ensurePeriodSelection(selectedTopPeriods, periods, ps => ps); // default: all periods selected (total)
-    buildPeriodPickerUI('topPeriodPicker', periods, store, selectedTopPeriods, { allLabel: 'All periods (total)' });
-  }
-
-  function populateTrendPeriodPicker(periods, store){
-    // Default: most recent 12 periods, to keep the axis readable as more weeks/months pile up.
-    ensurePeriodSelection(selectedTrendPeriods, periods, ps => ps.slice(-Math.min(12, ps.length)));
-    buildPeriodPickerUI('trendPeriodPicker', periods, store, selectedTrendPeriods, {
-      allLabel: 'All periods',
-      presets: [
-        { label:'Last 8', count:8 },
-        { label:'Last 13', count:13 },
-        { label:'Last 26', count:26 }
-      ]
-    });
-  }
-
-  function drawTopWarehouses(periods, store){
-    const activePeriods = periods.filter(p => selectedTopPeriods.has(p));
+  function drawTopWarehouses(periodKeys, store){
     const totals = new Map();
-    for(const p of activePeriods){
+    for(const p of periodKeys){
       const entry = store.get(p);
+      if(!entry) continue;
       for(const [wh, vals] of entry.warehouses){
         if(wh === '__ALL__') continue;
         totals.set(wh, (totals.get(wh)||0) + vals.revenue);
