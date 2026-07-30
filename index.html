@@ -565,11 +565,17 @@
         </div>
         <div class="wrap"><div id="chartAdj" class="chart-svg"></div></div>
       </div>
-      <div class="chart-card full">
+      <div class="chart-card">
         <div class="card-head">
           <h3>Top fridges by revenue <span id="topScope" style="font-weight:400;font-size:12px;color:var(--ink-soft);"></span></h3>
         </div>
         <div class="wrap" style="height:320px;"><div id="chartTopWarehouses" class="chart-svg"></div></div>
+      </div>
+      <div class="chart-card">
+        <div class="card-head">
+          <h3>Bottom fridges by revenue <span id="bottomScope" style="font-weight:400;font-size:12px;color:var(--ink-soft);"></span></h3>
+        </div>
+        <div class="wrap" style="height:320px;"><div id="chartBottomWarehouses" class="chart-svg"></div></div>
       </div>
     </div>
 
@@ -1814,6 +1820,7 @@
         threshold: isNaN(adjTargetVal) ? null : adjTargetVal, thresholdFormat: v => fmtPct(v) });
 
     document.getElementById('topScope').textContent = '(' + scopeText + ')';
+    document.getElementById('bottomScope').textContent = '(' + scopeText + ')';
     drawTopWarehouses(scopePeriods, store);
 
     // ---- Needs attention: latest complete week/month vs its own recent history —
@@ -2056,9 +2063,10 @@
         totals.set(wh, (totals.get(wh)||0) + vals.revenue);
       }
     }
-    const sorted = [...totals.entries()].sort((a,b)=>b[1]-a[1]).slice(0,15)
+    const ranked = [...totals.entries()].sort((a,b)=>b[1]-a[1])
       .map(([label,value]) => ({ label, value }));
-    renderHBarChart('chartTopWarehouses', sorted, { color:getVar('--teal'), format: v => fmtEUR(v) });
+    renderHBarChart('chartTopWarehouses', ranked.slice(0,15), { color:getVar('--teal'), format: v => fmtEUR(v) });
+    renderHBarChart('chartBottomWarehouses', ranked.slice(-15).reverse(), { color:getVar('--amber'), format: v => fmtEUR(v) });
   }
 
   // ---------- Customers tab ----------
