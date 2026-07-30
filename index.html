@@ -599,12 +599,7 @@
           <button data-gran="month">Month</button>
         </div>
         <select id="custWarehouseSelect"></select>
-        <select id="custScopeSelect">
-          <option value="4">Last 4 periods</option>
-          <option value="8" selected>Last 8 periods</option>
-          <option value="13">Last 13 periods</option>
-          <option value="all">All periods</option>
-        </select>
+        <div id="custRangePicker"></div>
         <div class="spacer"></div>
         <span class="file-status" id="custRangeLabel"></span>
       </div>
@@ -1430,11 +1425,10 @@
     }
 
     function commit(start, end){
-      setRange({ start: startOfDay(start), end: startOfDay(end) });
       picking = null;
-      updateBtn();
       container.classList.remove('open');
-      renderAll();
+      setRange({ start: startOfDay(start), end: startOfDay(end) }); // callback triggers its own refresh
+      updateBtn();
     }
 
     function renderMonth(y, m){
@@ -1523,8 +1517,8 @@
     { label:'This year', range: () => ({ start: new Date(today().getFullYear(),0,1), end: today() }) },
   ];
 
-  createRangePicker('mainRangePicker', () => mainRange, r => { mainRange = r; }, MAIN_PRESETS);
-  createRangePicker('compareRangePicker', () => customCompareRange, r => { customCompareRange = r; }, MAIN_PRESETS);
+  createRangePicker('mainRangePicker', () => mainRange, r => { mainRange = r; renderAll(); }, MAIN_PRESETS);
+  createRangePicker('compareRangePicker', () => customCompareRange, r => { customCompareRange = r; renderAll(); }, MAIN_PRESETS);
 
   // ---- Needs attention: flags fridges whose latest period looks off vs their own recent history ----
   function computeAnomalies(periods, store, whScope, hasCost){
@@ -2093,7 +2087,8 @@
     document.querySelectorAll('#custGranSeg button').forEach(b=>b.classList.toggle('active', b===btn));
     custRefresh();
   });
-  document.getElementById('custScopeSelect').addEventListener('change', custRefresh);
+  let custRange = { start: addDays(startOfDay(new Date()), -90), end: startOfDay(new Date()) };
+  createRangePicker('custRangePicker', () => custRange, r => { custRange = r; custRefresh(); }, MAIN_PRESETS);
 
   function populateCustWarehouseSelect(){
     const sel = document.getElementById('custWarehouseSelect');
@@ -2116,16 +2111,15 @@
   async function custRefresh(){
     if(DATA_SOURCE !== 'supabase') return; // customer layer needs the database
     const wh = document.getElementById('custWarehouseSelect').value || '__ALL__';
-    const scopeN = document.getElementById('custScopeSelect').value;
     document.getElementById('custRangeLabel').textContent = 'Loading…';
     try{
       const summary = await rpc('get_cust_summary', { p_granularity: custGran });
       const mine = summary.filter(r => r.warehouse === wh);
-      const periods = [...new Set(mine.map(r => r.period_key))].sort((a,b)=>a-b);
       const byP = new Map(mine.map(r => [r.period_key, r]));
 
-      // Exclude the in-progress period from KPIs/scope (same rule as the ops view).
-      const complete = periods.filter(p => isPeriodComplete(p, custGran));
+      // Periods covered by the picked date range, minus the in-progress one for KPIs.
+      const rangeKeys = rangeToKeys(custRange, custGran).filter(p => byP.has(p));
+      const complete = rangeKeys.filter(p => isPeriodComplete(p, custGran));
       const labels = complete.map(p => periodLabelFromKey(p, custGran));
       const rows = complete.map(p => byP.get(p));
 
@@ -2145,8 +2139,7 @@
         custDelta('ckpiRepeatDelta', rate(last), prev && rate(prev), fmtPct, true);
         custDelta('ckpiRevBuyerDelta', rpb(last), prev && rpb(prev), fmtEUR, true);
       }
-      document.getElementById('custRangeLabel').textContent =
-        labels.length ? labels[0] + ' — ' + labels[labels.length-1] : '';
+      document.getElementById('custRangeLabel').textContent = fmtRange(custRange);
 
       // Trend charts (all complete periods).
       drawLineBar('chartBuyers', labels, [
@@ -2160,8 +2153,8 @@
         [{ label:'orders/buyer', data: rows.map(r=>r.buyers?r.orders/r.buyers:0), color: getVar('--green') }],
         { yFormat: v=>v.toFixed(1), tooltipFormat: v=>v.toFixed(2) });
 
-      // Scoped range for concentration + assortment.
-      const scopePeriods = scopeN === 'all' ? complete : complete.slice(-parseInt(scopeN,10));
+      // Concentration + assortment follow the same picked range.
+      const scopePeriods = complete;
       if(scopePeriods.length){
         const pFrom = scopePeriods[0], pTo = scopePeriods[scopePeriods.length-1];
         const scopeText = periodLabelFromKey(pFrom,custGran) + ' — ' + periodLabelFromKey(pTo,custGran);
