@@ -498,18 +498,11 @@
 
     <div class="kpi-row">
       <div class="kpi rev">
-        <div class="label">Revenue</div>
+        <div class="label">Total sales</div>
         <div class="value" id="kpiRevenue">—</div>
-        <div class="sub" id="kpiRevenueSub">—</div>
+        <div class="value" id="kpiUnits" style="font-size:19px;margin-top:2px;">—</div>
         <div class="kpi-delta" id="kpiRevenueDelta"></div>
         <div class="kpi-spark" id="sparkRevenue"></div>
-      </div>
-      <div class="kpi units">
-        <div class="label">Units sold</div>
-        <div class="value" id="kpiUnits">—</div>
-        <div class="sub" id="kpiUnitsSub">—</div>
-        <div class="kpi-delta" id="kpiUnitsDelta"></div>
-        <div class="kpi-spark" id="sparkUnits"></div>
       </div>
       <div class="kpi scrap">
         <div class="label">Scrap (waste)</div>
@@ -1656,6 +1649,7 @@
   const MAIN_PRESETS = [
     { label:'Today', range: () => ({ start: today(), end: today() }) },
     { label:'This week', range: () => { const t=today(); const mon=addDays(t, -((t.getDay()+6)%7)); return { start:mon, end:t }; } },
+    { label:'Last week', range: () => { const t=today(); const mon=addDays(t, -((t.getDay()+6)%7) - 7); return { start:mon, end:addDays(mon, 6) }; } },
     { label:'This month', range: () => ({ start: new Date(today().getFullYear(), today().getMonth(), 1), end: today() }) },
     { label:'Last month', range: () => { const t=today(); return { start:new Date(t.getFullYear(), t.getMonth()-1, 1), end:new Date(t.getFullYear(), t.getMonth(), 0) }; } },
     { label:'Last 3 months', range: () => ({ start: addDays(today(), -90), end: today() }) },
@@ -1897,10 +1891,13 @@
     const prevTotals = prevPeriods.length ? computeKpiTotals(prevPeriods, store, selectedWh, mode, hasCost, percentBasis) : null;
     const fmt = usePercent ? fmtPct : (useEur ? fmtEUR : (n => fmtNum(n) + ' u.'));
 
-    document.getElementById('kpiRevenue').textContent = fmtEUR(cur.totRevenue);
-    document.getElementById('kpiRevenueSub').textContent = fmtNum(cur.totUnits) + ' units sold';
-    document.getElementById('kpiUnits').textContent = fmtNum(cur.totUnits);
-    document.getElementById('kpiUnitsSub').textContent = scopeText;
+    // Total sales tile: € and units stacked, each with the selection's share of the
+    // grand total (all fridges, incl. unchecked ones) for the same range in brackets.
+    const grandRev = sumField(scopePeriods, store, '__ALL__', 'revenue');
+    const grandUnits = sumField(scopePeriods, store, '__ALL__', 'units');
+    const shareTxt = (v, total) => total > 0 ? ' (' + (v/total*100).toFixed(1) + '%)' : '';
+    document.getElementById('kpiRevenue').textContent = fmtEUR(cur.totRevenue) + shareTxt(cur.totRevenue, grandRev);
+    document.getElementById('kpiUnits').textContent = fmtNum(cur.totUnits) + ' u.' + shareTxt(cur.totUnits, grandUnits);
     document.getElementById('kpiScrap').textContent = fmt(cur.totScrap);
     const scrapUnitsTotal = sumField(scopePeriods, store, selectedWh, 'scrap');
     document.getElementById('kpiScrapSub').textContent = usePercent
@@ -1911,14 +1908,12 @@
     document.getElementById('kpiAdjSub').textContent = '+' + fmt(cur.totAdjPos) + ' / -' + fmt(cur.totAdjNeg);
 
     renderKpiDelta('kpiRevenueDelta', cur.totRevenue, prevTotals && prevTotals.totRevenue, fmtEUR, true);
-    renderKpiDelta('kpiUnitsDelta', cur.totUnits, prevTotals && prevTotals.totUnits, n => fmtNum(n) + ' u.', true);
     renderKpiDelta('kpiScrapDelta', cur.totScrap, prevTotals && prevTotals.totScrap, fmt, false);
     renderKpiDelta('kpiAdjDelta', cur.netAdj, prevTotals && prevTotals.netAdj, fmt, true);
 
     // ---- Sparklines: the selected range itself, one point per period ----
     const sparkTotals = scopePeriods.map(p => computeKpiTotals([p], store, selectedWh, mode, hasCost, percentBasis));
     renderSparkline('sparkRevenue', sparkTotals.map(t=>t.totRevenue), getVar('--teal'));
-    renderSparkline('sparkUnits', sparkTotals.map(t=>t.totUnits), getVar('--teal-dark'));
     renderSparkline('sparkScrap', sparkTotals.map(t=>t.totScrap), getVar('--amber'));
     renderSparkline('sparkAdj', sparkTotals.map(t=>t.netAdj), getVar('--rose'));
 
