@@ -2220,8 +2220,12 @@
 
     if(opts.stacked){
       // Stacked bars: datasets pile upward per label. Negative segments are clamped to 0.
+      // Each segment carries its OWN tooltip (value + share of the bar) and elevates on hover.
       const barWidth = Math.max(2, slotW*0.68);
       const cumTops = labels.map(() => zeroY);
+      const totals = labels.map((_,i) => datasets.reduce((a,d)=>a+Math.max(d.data[i]||0,0),0));
+      const { tip: stackTip, wrap: stackWrap } = ensureTooltip(container);
+      const fmtSeg = opts.tooltipFormat || (v => v);
       datasets.forEach(ds => {
         labels.forEach((lab,i) => {
           const v = Math.max(ds.data[i] || 0, 0);
@@ -2230,6 +2234,15 @@
           const y = cumTops[i] - h;
           const x = paddingLeft + slotW*i + (slotW - barWidth)/2;
           const rect = svgEl('rect', { x:x.toFixed(1), y:y.toFixed(1), width:barWidth.toFixed(1), height:Math.max(h,0.5).toFixed(1), fill: ds.color });
+          rect.style.transformBox = 'fill-box';
+          rect.style.transformOrigin = '50% 50%';
+          rect.style.transition = 'transform .08s ease';
+          rect.addEventListener('mousemove', e => {
+            rect.style.transform = 'scale(1.12, 1.06)';
+            const share = totals[i] > 0 ? ' (' + (v/totals[i]*100).toFixed(1) + '% of ' + lab + ')' : '';
+            showTip(stackTip, stackWrap, e, [lab + ' — ' + ds.label, fmtSeg(v) + share]);
+          });
+          rect.addEventListener('mouseleave', () => { rect.style.transform = ''; hideTip(stackTip); });
           svg.appendChild(rect);
           cumTops[i] = y;
         });
@@ -2245,7 +2258,6 @@
         text.textContent = lab;
         svg.appendChild(text);
       });
-      attachChartHover(container, svg, labels, datasets, opts, { paddingLeft, paddingTop, slotW, innerH, stacked:true });
       container.appendChild(svg);
       return;
     }
@@ -2253,6 +2265,7 @@
     const asLine = opts.type === 'line' || (opts.type === undefined && labels.length > 20);
     const grouped = !!opts.grouped;
     const groupCount = datasets.length;
+    const hoverTargets = labels.map(() => []); // svg nodes to elevate per period index
 
     datasets.forEach((ds, dsIndex) => {
       if(asLine){
@@ -2268,8 +2281,10 @@
         });
         svg.appendChild(path);
         if(n <= 60){
-          points.forEach(p => {
-            svg.appendChild(svgEl('circle', { cx:p[0], cy:p[1], r:2.4, fill: ds.color }));
+          points.forEach((p,i) => {
+            const c = svgEl('circle', { cx:p[0], cy:p[1], r:2.4, fill: ds.color });
+            hoverTargets[i].push({ el:c, kind:'circle' });
+            svg.appendChild(c);
           });
         }
         if(showValueLabels){
@@ -2295,6 +2310,7 @@
             x = paddingLeft + slotW*i + (slotW - barWidth)/2;
           }
           const rect = svgEl('rect', { x:x.toFixed(1), y:yBase.toFixed(1), width:barWidth.toFixed(1), height:barH.toFixed(1), rx:2, fill: ds.color });
+          hoverTargets[i].push({ el:rect, kind:'bar' });
           svg.appendChild(rect);
           if(showValueLabels && barWidth >= 16){
             const labelText = opts.tooltipFormat ? opts.tooltipFormat(v) : String(v);
@@ -2352,15 +2368,28 @@
       });
     }
 
-    attachChartHover(container, svg, labels, datasets, opts, { paddingLeft, paddingTop, slotW, innerH });
+    attachChartHover(container, svg, labels, datasets, opts, { paddingLeft, paddingTop, slotW, innerH, hoverTargets });
     container.appendChild(svg);
   }
 
-  // Invisible per-period hover strips: the tooltip summarizes every series at that point.
+  // Invisible per-period hover strips: tooltip summarizes every series at that point,
+  // and the hovered period's marks elevate slightly.
   function attachChartHover(container, svg, labels, datasets, opts, geom){
     if(!labels.length) return;
     const { tip, wrap } = ensureTooltip(container);
     const fmtV = opts.tooltipFormat || (v => v);
+    const setElevated = (i, on) => {
+      (geom.hoverTargets && geom.hoverTargets[i] || []).forEach(t => {
+        if(t.kind === 'circle'){
+          t.el.setAttribute('r', on ? 4.4 : 2.4);
+        }else{
+          t.el.style.transformBox = 'fill-box';
+          t.el.style.transformOrigin = '50% 100%';
+          t.el.style.transition = 'transform .08s ease';
+          t.el.style.transform = on ? 'scale(1.15, 1.04)' : '';
+        }
+      });
+    };
     for(let i = 0; i < labels.length; i++){
       const strip = svgEl('rect', {
         x: (geom.paddingLeft + geom.slotW * i).toFixed(1), y: geom.paddingTop,
@@ -2369,19 +2398,15 @@
       });
       strip.style.cursor = 'crosshair';
       strip.addEventListener('mousemove', e => {
+        setElevated(i, true);
         const lines = [labels[i]];
-        // largest-first reads naturally for stacks; keep given order otherwise
-        const list = geom.stacked ? [...datasets].reverse() : datasets;
-        list.forEach(ds => lines.push((ds.label || 'Value') + ': ' + fmtV(ds.data[i] || 0)));
-        if(geom.stacked && datasets.length > 1){
-          lines.push('Total: ' + fmtV(datasets.reduce((a,d)=>a+Math.max(d.data[i]||0,0),0)));
-        }
+        datasets.forEach(ds => lines.push((ds.label || 'Value') + ': ' + fmtV(ds.data[i] || 0)));
         showTip(tip, wrap, e, lines);
       });
-      strip.addEventListener('mouseleave', () => hideTip(tip));
+      strip.addEventListener('mouseleave', () => { setElevated(i, false); hideTip(tip); });
       svg.appendChild(strip);
     }
-    svg.addEventListener('mouseleave', () => hideTip(tip));
+    svg.addEventListener('mouseleave', () => { hideTip(tip); labels.forEach((_,i)=>setElevated(i,false)); });
   }
 
   // Horizontal bar list (top fridges)
@@ -2403,9 +2428,15 @@
       const barW = innerW * (it.value/maxV);
       const rect = svgEl('rect', { x:paddingLeft, y:y+3, width:Math.max(barW,1).toFixed(1), height:rowH-8, rx:3, fill: opts.color || '#0E7C86' });
       svg.appendChild(rect);
+      rect.style.transformBox = 'fill-box';
+      rect.style.transformOrigin = '0% 50%';
+      rect.style.transition = 'transform .08s ease';
       const strip = svgEl('rect', { x:0, y:y, width:width, height:rowH, fill:'transparent' });
-      strip.addEventListener('mousemove', e => showTip(tip, wrap, e, [it.label, (opts.format ? opts.format(it.value) : it.value)]));
-      strip.addEventListener('mouseleave', () => hideTip(tip));
+      strip.addEventListener('mousemove', e => {
+        rect.style.transform = 'scale(1.02, 1.25)';
+        showTip(tip, wrap, e, [it.label, (opts.format ? opts.format(it.value) : it.value)]);
+      });
+      strip.addEventListener('mouseleave', () => { rect.style.transform = ''; hideTip(tip); });
       svg.appendChild(strip);
 
       const label = svgEl('text', { x:paddingLeft-8, y:y+rowH/2+4, 'text-anchor':'end', 'font-size':11, 'font-family':'Inter, sans-serif', fill:'#152227', 'pointer-events':'none' });
