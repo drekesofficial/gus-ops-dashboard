@@ -1212,7 +1212,7 @@
     }else{
       btn.textContent = selected.size + ' of ' + total + ' fridges';
     }
-    btn.addEventListener('click', e => { e.stopPropagation(); container.classList.toggle('open'); });
+    btn.addEventListener('click', e => { e.stopPropagation(); container.classList.toggle('open'); fitPanel(container); });
     container.appendChild(btn);
 
     const panel = document.createElement('div');
@@ -1320,7 +1320,7 @@
     else if(checked.size === 0) btn.textContent = 'No categories';
     else if(checked.size === 1) btn.textContent = [...checked][0];
     else btn.textContent = checked.size + ' of ' + ALL_CATEGORIES.length + ' categories';
-    btn.addEventListener('click', e => { e.stopPropagation(); container.classList.toggle('open'); });
+    btn.addEventListener('click', e => { e.stopPropagation(); container.classList.toggle('open'); fitPanel(container); });
     container.appendChild(btn);
 
     const panel = document.createElement('div');
@@ -1406,6 +1406,7 @@
     for(const [name, node] of tree) renderNode(name, node, 0);
 
     container.appendChild(panel);
+    fitPanel(container);
   }
 
   document.getElementById('granSeg').addEventListener('click', e=>{
@@ -1628,7 +1629,7 @@
       viewYear = r ? r.start.getFullYear() : new Date().getFullYear();
       viewMonth = r ? r.start.getMonth() : new Date().getMonth();
       container.classList.toggle('open');
-      if(container.classList.contains('open')) renderPanel();
+      if(container.classList.contains('open')){ renderPanel(); fitPanel(container); }
     });
     container.appendChild(btn);
 
@@ -1721,6 +1722,7 @@
       months.appendChild(m1.wrap);
       months.appendChild(m2.wrap);
       panel.appendChild(months);
+      fitPanel(container);
     }
 
     updateBtn();
@@ -2119,6 +2121,54 @@
     return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   }
 
+  // ---- Hover tooltip shared by all charts ----
+  function ensureTooltip(container){
+    const wrap = container.closest('.wrap') || container.parentElement;
+    let tip = wrap.querySelector(':scope > .chart-tooltip');
+    if(!tip){
+      tip = document.createElement('div');
+      tip.className = 'chart-tooltip';
+      wrap.style.position = 'relative';
+      wrap.appendChild(tip);
+    }
+    return { tip, wrap };
+  }
+
+  function showTip(tip, wrap, e, lines){
+    tip.innerHTML = '<span class="tt-label"></span>' + lines.slice(1).map(() => '<div></div>').join('');
+    tip.querySelector('.tt-label').textContent = lines[0];
+    [...tip.querySelectorAll('div')].forEach((d,i) => d.textContent = lines[i+1]);
+    const r = wrap.getBoundingClientRect();
+    const x = e.clientX - r.left, y = e.clientY - r.top;
+    tip.style.left = x + 'px';
+    tip.style.top = Math.max(y, 30) + 'px';
+    tip.style.transform = x > r.width * 0.6 ? 'translate(calc(-100% - 10px), -100%)' : 'translate(10px, -100%)';
+    tip.style.display = 'block';
+  }
+  function hideTip(tip){ tip.style.display = 'none'; }
+
+  // ---- Keep dropdown/calendar panels inside the viewport ----
+  function fitPanel(container){
+    const panel = container.querySelector(':scope > .cal-panel, :scope > .period-picker-panel');
+    if(!panel || !container.classList.contains('open')) return;
+    panel.style.left = ''; panel.style.right = ''; panel.style.top = ''; panel.style.bottom = '';
+    const r = panel.getBoundingClientRect();
+    if(r.right > window.innerWidth - 8){
+      panel.style.left = 'auto'; panel.style.right = '0';
+      if(panel.getBoundingClientRect().left < 8){
+        panel.style.right = 'auto';
+        panel.style.left = (8 - container.getBoundingClientRect().left) + 'px';
+      }
+    }else if(r.left < 8){
+      panel.style.right = 'auto';
+      panel.style.left = (8 - container.getBoundingClientRect().left) + 'px';
+    }
+    const rb = panel.getBoundingClientRect();
+    if(rb.bottom > window.innerHeight - 8 && container.getBoundingClientRect().top > rb.height + 16){
+      panel.style.top = 'auto'; panel.style.bottom = 'calc(100% + 8px)';
+    }
+  }
+
   function svgEl(tag, attrs){
     const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
     for(const k in attrs) el.setAttribute(k, attrs[k]);
@@ -2180,9 +2230,6 @@
           const y = cumTops[i] - h;
           const x = paddingLeft + slotW*i + (slotW - barWidth)/2;
           const rect = svgEl('rect', { x:x.toFixed(1), y:y.toFixed(1), width:barWidth.toFixed(1), height:Math.max(h,0.5).toFixed(1), fill: ds.color });
-          const title = svgEl('title', {});
-          title.textContent = labels[i] + ' — ' + ds.label + ': ' + (opts.tooltipFormat ? opts.tooltipFormat(ds.data[i]||0) : (ds.data[i]||0));
-          rect.appendChild(title);
           svg.appendChild(rect);
           cumTops[i] = y;
         });
@@ -2198,6 +2245,7 @@
         text.textContent = lab;
         svg.appendChild(text);
       });
+      attachChartHover(container, svg, labels, datasets, opts, { paddingLeft, paddingTop, slotW, innerH, stacked:true });
       container.appendChild(svg);
       return;
     }
@@ -2220,12 +2268,8 @@
         });
         svg.appendChild(path);
         if(n <= 60){
-          points.forEach((p,i) => {
-            const c = svgEl('circle', { cx:p[0], cy:p[1], r:2.4, fill: ds.color });
-            const title = svgEl('title', {});
-            title.textContent = labels[i] + ': ' + (opts.tooltipFormat ? opts.tooltipFormat(ds.data[i]) : ds.data[i]);
-            c.appendChild(title);
-            svg.appendChild(c);
+          points.forEach(p => {
+            svg.appendChild(svgEl('circle', { cx:p[0], cy:p[1], r:2.4, fill: ds.color }));
           });
         }
         if(showValueLabels){
@@ -2251,9 +2295,6 @@
             x = paddingLeft + slotW*i + (slotW - barWidth)/2;
           }
           const rect = svgEl('rect', { x:x.toFixed(1), y:yBase.toFixed(1), width:barWidth.toFixed(1), height:barH.toFixed(1), rx:2, fill: ds.color });
-          const title = svgEl('title', {});
-          title.textContent = labels[i] + (ds.label ? ' — ' + ds.label : '') + ': ' + (opts.tooltipFormat ? opts.tooltipFormat(v) : v);
-          rect.appendChild(title);
           svg.appendChild(rect);
           if(showValueLabels && barWidth >= 16){
             const labelText = opts.tooltipFormat ? opts.tooltipFormat(v) : String(v);
@@ -2311,7 +2352,36 @@
       });
     }
 
+    attachChartHover(container, svg, labels, datasets, opts, { paddingLeft, paddingTop, slotW, innerH });
     container.appendChild(svg);
+  }
+
+  // Invisible per-period hover strips: the tooltip summarizes every series at that point.
+  function attachChartHover(container, svg, labels, datasets, opts, geom){
+    if(!labels.length) return;
+    const { tip, wrap } = ensureTooltip(container);
+    const fmtV = opts.tooltipFormat || (v => v);
+    for(let i = 0; i < labels.length; i++){
+      const strip = svgEl('rect', {
+        x: (geom.paddingLeft + geom.slotW * i).toFixed(1), y: geom.paddingTop,
+        width: Math.max(geom.slotW, 1).toFixed(1), height: geom.innerH,
+        fill: 'transparent'
+      });
+      strip.style.cursor = 'crosshair';
+      strip.addEventListener('mousemove', e => {
+        const lines = [labels[i]];
+        // largest-first reads naturally for stacks; keep given order otherwise
+        const list = geom.stacked ? [...datasets].reverse() : datasets;
+        list.forEach(ds => lines.push((ds.label || 'Value') + ': ' + fmtV(ds.data[i] || 0)));
+        if(geom.stacked && datasets.length > 1){
+          lines.push('Total: ' + fmtV(datasets.reduce((a,d)=>a+Math.max(d.data[i]||0,0),0)));
+        }
+        showTip(tip, wrap, e, lines);
+      });
+      strip.addEventListener('mouseleave', () => hideTip(tip));
+      svg.appendChild(strip);
+    }
+    svg.addEventListener('mouseleave', () => hideTip(tip));
   }
 
   // Horizontal bar list (top fridges)
@@ -2327,23 +2397,26 @@
     const maxV = Math.max(1, ...items.map(it => it.value));
 
     const svg = svgEl('svg', { viewBox:`0 0 ${width} ${height}` });
+    const { tip, wrap } = ensureTooltip(container);
     items.forEach((it,i) => {
       const y = paddingTop + i*rowH;
       const barW = innerW * (it.value/maxV);
       const rect = svgEl('rect', { x:paddingLeft, y:y+3, width:Math.max(barW,1).toFixed(1), height:rowH-8, rx:3, fill: opts.color || '#0E7C86' });
-      const title = svgEl('title', {});
-      title.textContent = it.label + ': ' + (opts.format ? opts.format(it.value) : it.value);
-      rect.appendChild(title);
       svg.appendChild(rect);
+      const strip = svgEl('rect', { x:0, y:y, width:width, height:rowH, fill:'transparent' });
+      strip.addEventListener('mousemove', e => showTip(tip, wrap, e, [it.label, (opts.format ? opts.format(it.value) : it.value)]));
+      strip.addEventListener('mouseleave', () => hideTip(tip));
+      svg.appendChild(strip);
 
-      const label = svgEl('text', { x:paddingLeft-8, y:y+rowH/2+4, 'text-anchor':'end', 'font-size':11, 'font-family':'Inter, sans-serif', fill:'#152227' });
+      const label = svgEl('text', { x:paddingLeft-8, y:y+rowH/2+4, 'text-anchor':'end', 'font-size':11, 'font-family':'Inter, sans-serif', fill:'#152227', 'pointer-events':'none' });
       label.textContent = it.label.length > 24 ? it.label.slice(0,22)+'…' : it.label;
       svg.appendChild(label);
 
-      const valText = svgEl('text', { x:paddingLeft+barW+6, y:y+rowH/2+4, 'font-size':10, 'font-family':'IBM Plex Mono, monospace', fill:'#5B6B72' });
+      const valText = svgEl('text', { x:paddingLeft+barW+6, y:y+rowH/2+4, 'font-size':10, 'font-family':'IBM Plex Mono, monospace', fill:'#5B6B72', 'pointer-events':'none' });
       valText.textContent = opts.format ? opts.format(it.value) : it.value;
       svg.appendChild(valText);
     });
+    svg.addEventListener('mouseleave', () => hideTip(tip));
     container.appendChild(svg);
     container.parentElement.style.height = height + 'px';
   }
