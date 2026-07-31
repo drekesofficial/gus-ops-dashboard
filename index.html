@@ -341,6 +341,10 @@
   }
   .movers-empty{color:var(--ink-soft);font-size:13px;padding:6px 4px;}
 
+  .stack-legend{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:10px;font-size:11.5px;color:var(--ink-soft);}
+  .stack-legend span{display:inline-flex;align-items:center;gap:5px;}
+  .stack-legend i{width:10px;height:10px;border-radius:3px;display:inline-block;}
+
   /* ---------- Calendar range picker ---------- */
   .cal-picker{position:relative;}
   .cal-btn{
@@ -465,6 +469,7 @@
       <div class="seg" id="viewSeg">
         <button data-view="ops" class="active">Operations</button>
         <button data-view="cust">Customers</button>
+        <button data-view="assort">Assortment</button>
       </div>
     </div>
 
@@ -659,9 +664,56 @@
         <div class="wrap" style="height:320px;"><div id="chartConcentration" class="chart-svg"></div></div>
       </div>
 
+
+      <footer class="note">Customers are pseudonymous Odoo partner IDs — no names are stored outside Odoo. "New customer" counts a customer's first-ever purchase at the selected fridge (or anywhere, for the network view).</footer>
+    </div><!-- /custView -->
+
+    <div id="assortView" style="display:none;">
+      <div class="controls">
+        <div class="seg" id="assortGranSeg">
+          <button data-gran="day">Day</button>
+          <button data-gran="week" class="active">Week</button>
+          <button data-gran="month">Month</button>
+        </div>
+        <div class="seg" id="assortModeSeg">
+          <button data-mode="eur" class="active">€</button>
+          <button data-mode="units">Units</button>
+        </div>
+        <div id="assortWarehousePicker" class="period-picker"></div>
+        <div id="assortCategoryPicker" class="period-picker"></div>
+        <div id="assortRangePicker"></div>
+        <div class="spacer"></div>
+        <span class="file-status" id="assortRangeLabel"></span>
+      </div>
+
+      <div class="chart-card full" style="margin-bottom:16px;">
+        <h3>Sales by category <span id="assortRevScope" style="font-weight:400;font-size:12px;color:var(--ink-soft);"></span></h3>
+        <div class="wrap" style="height:300px;"><div id="chartAssortRev" class="chart-svg"></div></div>
+        <div id="legendAssortRev" class="stack-legend"></div>
+      </div>
+
+      <div class="chart-grid">
+        <div class="chart-card">
+          <h3>Scrap by category</h3>
+          <div class="wrap"><div id="chartAssortScrap" class="chart-svg"></div></div>
+          <div id="legendAssortScrap" class="stack-legend"></div>
+        </div>
+        <div class="chart-card">
+          <h3>Net stock loss (adjustments) by category</h3>
+          <div class="wrap"><div id="chartAssortAdj" class="chart-svg"></div></div>
+          <div id="legendAssortAdj" class="stack-legend"></div>
+        </div>
+      </div>
+
+      <div class="chart-card full" style="margin-bottom:22px;">
+        <h3>Category deep-dive <span id="assortCatScope" style="font-weight:400;color:var(--ink-soft);"></span></h3>
+        <div class="table-scroll" style="max-height:480px;"><table class="data" id="assortCatTable"></table></div>
+        <div class="margin-note">Scrap and loss percentages are relative to the category's own sales (€ vs €, units vs units). Sorted by revenue.</div>
+      </div>
+
       <div class="chart-card full">
         <div class="detail-header">
-          <h3>Assortment <span id="prodScope" style="font-weight:400;color:var(--ink-soft);"></span></h3>
+          <h3>Product deep-dive <span id="prodScope" style="font-weight:400;color:var(--ink-soft);"></span></h3>
         </div>
         <div class="movers-grid">
           <div class="movers-col">
@@ -669,18 +721,18 @@
             <div class="table-scroll" style="max-height:340px;"><table class="data" id="topProdTable"></table></div>
           </div>
           <div class="movers-col">
-            <h4>Most scrap-prone products (scrap € vs sold €)</h4>
+            <h4>Most scrap-prone products</h4>
             <div class="table-scroll" style="max-height:340px;"><table class="data" id="scrapProdTable"></table></div>
           </div>
           <div class="movers-col">
-            <h4>Most adjustment-prone products (net stock loss €)</h4>
+            <h4>Most adjustment-prone products</h4>
             <div class="table-scroll" style="max-height:340px;"><table class="data" id="adjProdTable"></table></div>
           </div>
         </div>
       </div>
 
-      <footer class="note">Customers are pseudonymous Odoo partner IDs — no names are stored outside Odoo. "New customer" counts a customer's first-ever purchase at the selected fridge (or anywhere, for the network view).</footer>
-    </div><!-- /custView -->
+      <footer class="note">Scrap and net stock loss are valued at product cost. "Net stock loss" = negative minus positive stock adjustments; a product can show negative loss (net found stock).</footer>
+    </div><!-- /assortView -->
   </div>
 
 </div>
@@ -1227,6 +1279,10 @@
     buildCategoryPicker();
   }
 
+  function buildCategoryPicker(){
+    buildCategoryPickerUI('categoryPicker', () => selectedCategories, set => { selectedCategories = set; }, buildCategoryPicker, applyCategorySelection);
+  }
+
   async function applyCategorySelection(){
     if(DATA_SOURCE === 'supabase'){
       // Category is a server-side parameter, so this is a refetch rather than a
@@ -1249,14 +1305,14 @@
     }
   }
 
-  function buildCategoryPicker(){
-    const container = document.getElementById('categoryPicker');
+  function buildCategoryPickerUI(containerId, getSel, setSel, rebuild, onChange){
+    const container = document.getElementById(containerId);
     const wasOpen = container.classList.contains('open');
     clearNode(container);
     container.className = 'period-picker' + (wasOpen ? ' open' : '');
     container.style.display = ALL_CATEGORIES.length ? '' : 'none';
 
-    const checked = selectedCategories || new Set(ALL_CATEGORIES);
+    const checked = getSel() || new Set(ALL_CATEGORIES);
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'period-picker-btn';
@@ -1273,12 +1329,12 @@
 
     const actions = document.createElement('div');
     actions.className = 'period-picker-actions';
-    [['Select all', () => { selectedCategories = null; }],
-     ['Clear', () => { selectedCategories = new Set(); }]
+    [['Select all', () => setSel(null)],
+     ['Clear', () => setSel(new Set())]
     ].forEach(([label, fn]) => {
       const b = document.createElement('button');
       b.type = 'button'; b.textContent = label;
-      b.addEventListener('click', e => { e.stopPropagation(); fn(); buildCategoryPicker(); applyCategorySelection(); });
+      b.addEventListener('click', e => { e.stopPropagation(); fn(); rebuild(); onChange(); });
       actions.appendChild(b);
     });
     panel.appendChild(actions);
@@ -1319,9 +1375,9 @@
       return out;
     };
     const setSelection = set => {
-      selectedCategories = set.size === ALL_CATEGORIES.length ? null : set;
-      buildCategoryPicker();
-      applyCategorySelection();
+      setSel(set.size === ALL_CATEGORIES.length ? null : set);
+      rebuild();
+      onChange();
     };
     const renderNode = (name, node, depth) => {
       const vals = collectValues(node);
@@ -1336,7 +1392,7 @@
       cb.checked = nChecked === vals.length && vals.length > 0;
       cb.indeterminate = nChecked > 0 && nChecked < vals.length;
       cb.addEventListener('change', () => {
-        const set = selectedCategories ? new Set(selectedCategories) : new Set(ALL_CATEGORIES);
+        const set = getSel() ? new Set(getSel()) : new Set(ALL_CATEGORIES);
         if(cb.checked) vals.forEach(v => set.add(v)); else vals.forEach(v => set.delete(v));
         setSelection(set);
       });
@@ -2084,7 +2140,13 @@
     const innerH = Math.max(10, height - paddingTop - paddingBottom);
 
     const thresholdVal = (opts.threshold !== undefined && opts.threshold !== null && !isNaN(opts.threshold)) ? Number(opts.threshold) : null;
-    const allValues = datasets.reduce((acc,d)=>acc.concat(d.data), []);
+    let allValues;
+    if(opts.stacked){
+      // scale on the per-label totals, not individual segments
+      allValues = labels.map((_,i) => datasets.reduce((a,d)=>a+Math.max(d.data[i]||0,0),0));
+    }else{
+      allValues = datasets.reduce((acc,d)=>acc.concat(d.data), []);
+    }
     if(thresholdVal !== null) allValues.push(thresholdVal);
     let minV = Math.min(0, ...allValues);
     let maxV = Math.max(0, ...allValues, 1e-9);
@@ -2105,6 +2167,41 @@
 
     const slotW = innerW / Math.max(n, 1);
     const zeroY = paddingTop + innerH*(1 - (0-minV)/range);
+
+    if(opts.stacked){
+      // Stacked bars: datasets pile upward per label. Negative segments are clamped to 0.
+      const barWidth = Math.max(2, slotW*0.68);
+      const cumTops = labels.map(() => zeroY);
+      datasets.forEach(ds => {
+        labels.forEach((lab,i) => {
+          const v = Math.max(ds.data[i] || 0, 0);
+          if(v <= 0) return;
+          const h = innerH * (v / range);
+          const y = cumTops[i] - h;
+          const x = paddingLeft + slotW*i + (slotW - barWidth)/2;
+          const rect = svgEl('rect', { x:x.toFixed(1), y:y.toFixed(1), width:barWidth.toFixed(1), height:Math.max(h,0.5).toFixed(1), fill: ds.color });
+          const title = svgEl('title', {});
+          title.textContent = labels[i] + ' — ' + ds.label + ': ' + (opts.tooltipFormat ? opts.tooltipFormat(ds.data[i]||0) : (ds.data[i]||0));
+          rect.appendChild(title);
+          svg.appendChild(rect);
+          cumTops[i] = y;
+        });
+      });
+      // x labels
+      const minGapS = 46;
+      let lastXs = -Infinity;
+      labels.forEach((lab,i) => {
+        const x = paddingLeft + slotW*(i+0.5);
+        if(x - lastXs < minGapS) return;
+        lastXs = x;
+        const text = svgEl('text', { x, y:height-8, 'text-anchor':'middle', 'font-size':9, 'font-family':'IBM Plex Mono, monospace', fill:'#5B6B72' });
+        text.textContent = lab;
+        svg.appendChild(text);
+      });
+      container.appendChild(svg);
+      return;
+    }
+
     const asLine = opts.type === 'line' || (opts.type === undefined && labels.length > 20);
     const grouped = !!opts.grouped;
     const groupCount = datasets.length;
@@ -2286,10 +2383,12 @@
     const btn = e.target.closest('button');
     if(!btn) return;
     document.querySelectorAll('#viewSeg button').forEach(b=>b.classList.toggle('active', b===btn));
-    const cust = btn.dataset.view === 'cust';
-    document.getElementById('opsView').style.display = cust ? 'none' : '';
-    document.getElementById('custView').style.display = cust ? '' : 'none';
-    if(cust && !custStarted){ custStarted = true; populateCustWarehouseSelect(); custRefresh(); }
+    const view = btn.dataset.view;
+    document.getElementById('opsView').style.display = view === 'ops' ? '' : 'none';
+    document.getElementById('custView').style.display = view === 'cust' ? '' : 'none';
+    document.getElementById('assortView').style.display = view === 'assort' ? '' : 'none';
+    if(view === 'cust' && !custStarted){ custStarted = true; populateCustWarehouseSelect(); custRefresh(); }
+    if(view === 'assort' && !assortStarted){ assortStarted = true; assortInit(); assortRefresh(); }
   });
 
   document.getElementById('custGranSeg').addEventListener('click', e => {
@@ -2378,21 +2477,15 @@
         const pFrom = scopePeriods[0], pTo = scopePeriods[scopePeriods.length-1];
         const scopeText = periodLabelFromKey(pFrom,custGran) + ' — ' + periodLabelFromKey(pTo,custGran);
         document.getElementById('concScope').textContent = '(' + scopeText + ', all fridges)';
-        const whScopeText = !whs ? 'all fridges'
-          : (whs.length === 1 ? fridgeLabel(whs[0]) : whs.length + ' fridges');
-        document.getElementById('prodScope').textContent = '(' + whScopeText + ' · ' + scopeText + ')';
-
-        const [cohorts, conc, prods] = await Promise.all([
+        const [cohorts, conc] = await Promise.all([
           rpc('get_cust_cohorts', { p_warehouses: whs }),
-          rpc('get_cust_concentration', { p_granularity: custGran, p_from: pFrom, p_to: pTo }),
-          rpc('get_prod_insights', { p_granularity: custGran, p_from: pFrom, p_to: pTo, p_warehouses: whs })
+          rpc('get_cust_concentration', { p_granularity: custGran, p_from: pFrom, p_to: pTo })
         ]);
         renderCohorts(cohorts);
         renderHBarChart('chartConcentration',
           conc.filter(c => c.buyers >= 10 && custSelectedFridges.has(c.warehouse)).slice(0,15)
               .map(c=>({ label:fridgeLabel(c.warehouse), value:Number(c.top10_share) })),
           { color:getVar('--rose'), format:v=>v.toFixed(1)+'%' });
-        renderProdTables(prods);
       }
     }catch(err){
       console.error(err);
@@ -2453,45 +2546,222 @@
     });
     top.appendChild(tb);
 
-    const scrapT = document.getElementById('scrapProdTable');
-    clearNode(scrapT);
-    scrapT.innerHTML = '<thead><tr><th>Product</th><th>Scrap €</th><th>Scrap ratio</th></tr></thead>';
-    const tb2 = document.createElement('tbody');
-    prods
-      .filter(p => Number(p.scrap_value) > 0)
-      .map(p => ({...p, ratio: Number(p.scrap_value)/(Number(p.revenue)+Number(p.scrap_value))*100 }))
-      .sort((a,b)=>b.scrap_value-a.scrap_value)
-      .slice(0,15)
-      .forEach(p => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = '<td></td><td></td><td class="neg"></td>';
-        tr.children[0].textContent = p.product_name;
-        tr.children[1].textContent = fmtEUR(p.scrap_value);
-        tr.children[2].textContent = p.ratio.toFixed(0)+'%';
-        tb2.appendChild(tr);
-      });
-    tb2.childElementCount || (tb2.innerHTML = '<tr><td colspan="3" style="color:var(--ink-soft);">No scrap in this range.</td></tr>');
-    scrapT.appendChild(tb2);
+    const buildLossTable = (tableId, valField, qtyField, valHead, emptyMsg) => {
+      const t = document.getElementById(tableId);
+      clearNode(t);
+      t.innerHTML = '<thead><tr><th>Product</th><th>' + valHead + '</th><th>Units</th><th>Ratio</th></tr></thead>';
+      const tb = document.createElement('tbody');
+      prods
+        .filter(p => Number(p[valField]) > 0)
+        .map(p => ({...p, ratio: Number(p[valField])/(Number(p.revenue)+Number(p[valField]))*100 }))
+        .sort((a,b)=>b[valField]-a[valField])
+        .slice(0,15)
+        .forEach(p => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = '<td></td><td></td><td></td><td class="neg"></td>';
+          tr.children[0].textContent = p.product_name;
+          tr.children[0].title = p.product_category || '';
+          tr.children[1].textContent = fmtEUR(p[valField]);
+          tr.children[2].textContent = fmtNum(p[qtyField]);
+          tr.children[3].textContent = p.ratio.toFixed(0)+'%';
+          tb.appendChild(tr);
+        });
+      tb.childElementCount || (tb.innerHTML = '<tr><td colspan="4" style="color:var(--ink-soft);">' + emptyMsg + '</td></tr>');
+      t.appendChild(tb);
+    };
+    buildLossTable('scrapProdTable', 'scrap_value', 'scrap_qty', 'Scrap €', 'No scrap in this range.');
+    buildLossTable('adjProdTable', 'adj_loss_value', 'adj_loss_qty', 'Net loss €', 'No net stock loss in this range.');
+  }
 
-    const adjT = document.getElementById('adjProdTable');
-    clearNode(adjT);
-    adjT.innerHTML = '<thead><tr><th>Product</th><th>Net loss €</th><th>Loss ratio</th></tr></thead>';
-    const tb3 = document.createElement('tbody');
-    prods
-      .filter(p => Number(p.adj_loss_value) > 0)
-      .map(p => ({...p, ratio: Number(p.adj_loss_value)/(Number(p.revenue)+Number(p.adj_loss_value))*100 }))
-      .sort((a,b)=>b.adj_loss_value-a.adj_loss_value)
-      .slice(0,15)
-      .forEach(p => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = '<td></td><td></td><td class="neg"></td>';
-        tr.children[0].textContent = p.product_name;
-        tr.children[1].textContent = fmtEUR(p.adj_loss_value);
-        tr.children[2].textContent = p.ratio.toFixed(0)+'%';
-        tb3.appendChild(tr);
+  // ---------- Assortment tab ----------
+  let assortStarted = false, assortGran = 'week', assortMode = 'eur';
+  let assortRange = { start: new Date(new Date().getFullYear(), new Date().getMonth(), 1), end: startOfDay(new Date()) };
+  let assortFridges = new Set();
+  let assortCats = null; // null = all categories
+  const STACK_COLORS = ['#0E7C86','#E2823D','#2E9E6E','#D6553F','#3E7CB1','#8A62A8','#C4A035','#6B8E23','#A0527E','#B5651D','#4AA8A0','#7C8A8F'];
+  const OTHER_COLOR = '#C9D2D4';
+  const isoDate = d => d.getFullYear() + '-' + pad2(d.getMonth()+1) + '-' + pad2(d.getDate());
+
+  function assortInit(){
+    assortFridges = new Set(ALL_WAREHOUSES.filter(isRealFridge));
+    buildAssortWarehousePicker();
+    buildAssortCategoryPicker();
+    createRangePicker('assortRangePicker', () => assortRange, r => { assortRange = r; assortRefresh(); }, MAIN_PRESETS);
+    document.getElementById('assortGranSeg').addEventListener('click', e => {
+      const btn = e.target.closest('button');
+      if(!btn) return;
+      assortGran = btn.dataset.gran;
+      document.querySelectorAll('#assortGranSeg button').forEach(b=>b.classList.toggle('active', b===btn));
+      assortRefresh();
+    });
+    document.getElementById('assortModeSeg').addEventListener('click', e => {
+      const btn = e.target.closest('button');
+      if(!btn) return;
+      assortMode = btn.dataset.mode;
+      document.querySelectorAll('#assortModeSeg button').forEach(b=>b.classList.toggle('active', b===btn));
+      assortRefresh();
+    });
+  }
+  function buildAssortWarehousePicker(){
+    buildFridgePickerUI('assortWarehousePicker', () => assortFridges, set => { assortFridges = set; }, buildAssortWarehousePicker, assortRefresh);
+  }
+  function buildAssortCategoryPicker(){
+    buildCategoryPickerUI('assortCategoryPicker', () => assortCats, set => { assortCats = set; }, buildAssortCategoryPicker, assortRefresh);
+  }
+
+  // Display group = the category level of the path ("All / master / category / sub").
+  function catGroup(path){
+    if(!path) return 'Uncategorized';
+    const segs = String(path).split(' / ').filter((x,i) => !(i===0 && x==='All'));
+    return segs[1] || segs[0] || 'Uncategorized';
+  }
+
+  function renderStackLegend(containerId, entries){
+    const el = document.getElementById(containerId);
+    clearNode(el);
+    entries.forEach(([name, color]) => {
+      const span = document.createElement('span');
+      const dot = document.createElement('i');
+      dot.style.background = color;
+      span.appendChild(dot);
+      span.appendChild(document.createTextNode(name));
+      el.appendChild(span);
+    });
+  }
+
+  let assortSeq = 0;
+  async function assortRefresh(){
+    if(DATA_SOURCE !== 'supabase') return;
+    const seq = ++assortSeq;
+    const whs = assortFridges.size === ALL_WAREHOUSES.length ? null : [...assortFridges];
+    document.getElementById('assortRangeLabel').textContent = 'Loading…';
+    try{
+      const keys = rangeToKeys(assortRange, assortGran);
+      if(!keys.length) return;
+      const [catRows, prods] = await Promise.all([
+        rpc('get_cat_rollup', { p_granularity: assortGran, p_from: keys[0], p_to: keys[keys.length-1], p_warehouses: whs }),
+        rpc('get_prod_range', { p_start: isoDate(assortRange.start), p_end: isoDate(assortRange.end), p_warehouses: whs })
+      ]);
+      if(seq !== assortSeq) return;
+      document.getElementById('assortRangeLabel').textContent = fmtRange(assortRange);
+      const scopeTxt = '(' + (whs ? (whs.length === 1 ? fridgeLabel(whs[0]) : whs.length + ' fridges') : 'all fridges') + ' · ' + fmtRange(assortRange) + ')';
+      document.getElementById('assortRevScope').textContent = scopeTxt;
+      document.getElementById('assortCatScope').textContent = scopeTxt;
+      document.getElementById('prodScope').textContent = scopeTxt;
+
+      const inCatSel = c => !assortCats ? true : (c ? assortCats.has(c) : false);
+      const rows = catRows.filter(r => inCatSel(r.product_category));
+
+      const eur = assortMode === 'eur';
+      const fmtVal = eur ? fmtEUR : (n => fmtNum(n) + ' u.');
+      const metric = {
+        rev:   r => Number(eur ? r.revenue : r.units) || 0,
+        scrap: r => Number(eur ? r.scrap_value : r.scrap_qty) || 0,
+        loss:  r => (Number(eur ? r.adj_neg_value : r.adj_neg_qty) || 0) - (Number(eur ? r.adj_pos_value : r.adj_pos_qty) || 0)
+      };
+
+      // group x period sums
+      const groups = new Map(); // group -> Map(period -> {rev, scrap, loss})
+      const groupTotals = new Map();
+      for(const r of rows){
+        const g = catGroup(r.product_category);
+        if(!groups.has(g)) groups.set(g, new Map());
+        const per = groups.get(g);
+        const cell = per.get(r.period_key) || { rev:0, scrap:0, loss:0 };
+        cell.rev += metric.rev(r); cell.scrap += metric.scrap(r); cell.loss += metric.loss(r);
+        per.set(r.period_key, cell);
+        groupTotals.set(g, (groupTotals.get(g)||0) + metric.rev(r));
+      }
+      const ranked = [...groupTotals.entries()].sort((a,b)=>b[1]-a[1]).map(([g])=>g);
+      const topGroups = ranked.slice(0, 9);
+      const hasOther = ranked.length > topGroups.length;
+      const colorOf = g => topGroups.includes(g) ? STACK_COLORS[topGroups.indexOf(g) % STACK_COLORS.length] : OTHER_COLOR;
+
+      const labels = keys.map(k => {
+        if(assortGran === 'day'){
+          const d = new Date(Math.floor(k/10000), Math.floor(k/100)%100 - 1, k%100);
+          return d.toLocaleDateString('en-GB', { day:'numeric', month:'short' });
+        }
+        return periodLabelFromKey(k, assortGran);
       });
-    tb3.childElementCount || (tb3.innerHTML = '<tr><td colspan="3" style="color:var(--ink-soft);">No net stock loss in this range.</td></tr>');
-    adjT.appendChild(tb3);
+      const seriesFor = field => {
+        const ds = topGroups.map(g => ({
+          label: g, color: colorOf(g),
+          data: keys.map(k => (groups.get(g) && groups.get(g).get(k)) ? Math.max(groups.get(g).get(k)[field],0) : 0)
+        }));
+        if(hasOther){
+          ds.push({ label:'Other', color: OTHER_COLOR,
+            data: keys.map(k => ranked.slice(9).reduce((a,g) => {
+              const c = groups.get(g) && groups.get(g).get(k);
+              return a + (c ? Math.max(c[field],0) : 0);
+            }, 0)) });
+        }
+        return ds;
+      };
+      const legendEntries = topGroups.map(g => [g, colorOf(g)]).concat(hasOther ? [['Other', OTHER_COLOR]] : []);
+
+      renderChart('chartAssortRev', labels, seriesFor('rev'), { stacked:true, yFormat: fmtVal, tooltipFormat: fmtVal });
+      renderChart('chartAssortScrap', labels, seriesFor('scrap'), { stacked:true, yFormat: fmtVal, tooltipFormat: fmtVal });
+      renderChart('chartAssortAdj', labels, seriesFor('loss'), { stacked:true, yFormat: fmtVal, tooltipFormat: fmtVal });
+      renderStackLegend('legendAssortRev', legendEntries);
+      renderStackLegend('legendAssortScrap', legendEntries);
+      renderStackLegend('legendAssortAdj', legendEntries);
+
+      renderAssortCatTable(rows);
+      renderProdTables(prods.filter(p => inCatSel(p.product_category)));
+    }catch(err){
+      console.error(err);
+      document.getElementById('assortRangeLabel').textContent = 'Failed to load: ' + err.message;
+    }
+  }
+
+  function renderAssortCatTable(rows){
+    const agg = new Map();
+    for(const r of rows){
+      const g = catGroup(r.product_category);
+      const a = agg.get(g) || { revV:0, revU:0, scrV:0, scrU:0, lossV:0, lossU:0 };
+      a.revV += Number(r.revenue)||0; a.revU += Number(r.units)||0;
+      a.scrV += Number(r.scrap_value)||0; a.scrU += Number(r.scrap_qty)||0;
+      a.lossV += (Number(r.adj_neg_value)||0) - (Number(r.adj_pos_value)||0);
+      a.lossU += (Number(r.adj_neg_qty)||0) - (Number(r.adj_pos_qty)||0);
+      agg.set(g, a);
+    }
+    const table = document.getElementById('assortCatTable');
+    clearNode(table);
+    table.innerHTML = '<thead><tr><th>Category</th><th>Revenue</th><th>Units</th>' +
+      '<th>Scrap €</th><th>Scrap u.</th><th>Net loss €</th><th>Net loss u.</th></tr></thead>';
+    const tb = document.createElement('tbody');
+    const pct = (v,t) => t > 0 ? ' (' + (v/t*100).toFixed(1) + '%)' : '';
+    const rowsSorted = [...agg.entries()].sort((a,b)=>b[1].revV-a[1].revV);
+    const tot = { revV:0, revU:0, scrV:0, scrU:0, lossV:0, lossU:0 };
+    rowsSorted.forEach(([g,a]) => {
+      for(const k in tot) tot[k] += a[k];
+      const tr = document.createElement('tr');
+      tr.innerHTML = '<td></td><td></td><td></td><td></td><td></td><td></td><td></td>';
+      const c = tr.children;
+      c[0].textContent = g;
+      c[1].textContent = fmtEUR(a.revV);
+      c[2].textContent = fmtNum(a.revU);
+      c[3].textContent = fmtEUR(a.scrV) + pct(a.scrV, a.revV);
+      c[4].textContent = fmtNum(a.scrU) + pct(a.scrU, a.revU);
+      c[5].textContent = fmtEUR(a.lossV) + pct(Math.abs(a.lossV), a.revV);
+      c[6].textContent = fmtNum(a.lossU) + pct(Math.abs(a.lossU), a.revU);
+      if(a.revV > 0 && a.scrV/a.revV > 0.15) c[3].className = 'neg';
+      if(a.revV > 0 && Math.abs(a.lossV)/a.revV > 0.05 && a.lossV > 0) c[5].className = 'neg';
+      tb.appendChild(tr);
+    });
+    const trT = document.createElement('tr');
+    trT.style.fontWeight = '700';
+    trT.innerHTML = '<td>Total</td><td></td><td></td><td></td><td></td><td></td><td></td>';
+    const ct = trT.children;
+    ct[1].textContent = fmtEUR(tot.revV);
+    ct[2].textContent = fmtNum(tot.revU);
+    ct[3].textContent = fmtEUR(tot.scrV) + pct(tot.scrV, tot.revV);
+    ct[4].textContent = fmtNum(tot.scrU) + pct(tot.scrU, tot.revU);
+    ct[5].textContent = fmtEUR(tot.lossV) + pct(Math.abs(tot.lossV), tot.revV);
+    ct[6].textContent = fmtNum(tot.lossU) + pct(Math.abs(tot.lossU), tot.revU);
+    tb.appendChild(trT);
+    table.appendChild(tb);
   }
 
   // ---------- Auth gate ----------
