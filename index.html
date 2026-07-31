@@ -1295,25 +1295,59 @@
     });
     panel.appendChild(search);
 
-    ALL_CATEGORIES.forEach(cat => {
+    // ---- Hierarchical tree: All / master / category / subcategory ----
+    // Every row (any level) has a checkbox that toggles all DB category values at or
+    // below that node. A path can be both a value AND a parent (e.g. "Breakfast" with
+    // a "Yogurt" child) - its own value is included in the node's set.
+    const tree = new Map(); // nested: segment -> { children: Map, values: [] }
+    for(const cat of ALL_CATEGORIES){
+      const segs = cat.split(' / ').filter((x,i) => !(i===0 && x==='All'));
+      let level = tree;
+      let node = null;
+      const path = [];
+      for(const seg of segs){
+        path.push(seg);
+        if(!level.has(seg)) level.set(seg, { children: new Map(), values: [] });
+        node = level.get(seg);
+        level = node.children;
+      }
+      node.values.push(cat);
+    }
+    const collectValues = node => {
+      const out = [...node.values];
+      for(const child of node.children.values()) out.push(...collectValues(child));
+      return out;
+    };
+    const setSelection = set => {
+      selectedCategories = set.size === ALL_CATEGORIES.length ? null : set;
+      buildCategoryPicker();
+      applyCategorySelection();
+    };
+    const renderNode = (name, node, depth) => {
+      const vals = collectValues(node);
+      const nChecked = vals.filter(v => checked.has(v)).length;
       const label = document.createElement('label');
       label.className = 'period-picker-option';
+      label.style.paddingLeft = (6 + depth*16) + 'px';
+      if(depth === 0) label.style.fontWeight = '700';
+      else if(node.children.size) label.style.fontWeight = '600';
       const cb = document.createElement('input');
       cb.type = 'checkbox';
-      cb.checked = checked.has(cat);
+      cb.checked = nChecked === vals.length && vals.length > 0;
+      cb.indeterminate = nChecked > 0 && nChecked < vals.length;
       cb.addEventListener('change', () => {
         const set = selectedCategories ? new Set(selectedCategories) : new Set(ALL_CATEGORIES);
-        if(cb.checked) set.add(cat); else set.delete(cat);
-        selectedCategories = set.size === ALL_CATEGORIES.length ? null : set;
-        buildCategoryPicker();
-        applyCategorySelection();
+        if(cb.checked) vals.forEach(v => set.add(v)); else vals.forEach(v => set.delete(v));
+        setSelection(set);
       });
       const span = document.createElement('span');
-      span.textContent = cat;
+      span.textContent = name;
       label.appendChild(cb);
       label.appendChild(span);
       panel.appendChild(label);
-    });
+      for(const [childName, child] of node.children) renderNode(childName, child, depth + 1);
+    };
+    for(const [name, node] of tree) renderNode(name, node, 0);
 
     container.appendChild(panel);
   }
