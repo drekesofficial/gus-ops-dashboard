@@ -1880,38 +1880,31 @@
     document.getElementById('kpiRevenue').textContent = fmtEUR(cur.totRevenue) + shareTxt(cur.totRevenue, grand('revenue'));
     document.getElementById('kpiUnits').textContent = unitsTxt(cur.totUnits) + shareTxt(cur.totUnits, grand('units'));
 
-    // Scrap: € (share), units (share), % of sales
+    // Scrap: each line as % of the matching sales figure (€ vs sales €, units vs sales units).
+    const pctOf = (v, total) => total > 0 ? ' (' + (v/total*100).toFixed(1) + '% of sales)' : '';
     const scrapU = sumField(scopePeriods, store, selectedWh, 'scrap');
     const scrapV = sumField(scopePeriods, store, selectedWh, 'scrapValue');
-    const scrapDenom = percentBasis === 'value' ? cur.totRevenue : cur.totUnits;
-    const scrapNum = percentBasis === 'value' ? scrapV : scrapU;
     document.getElementById('kpiScrap').textContent = hasCost
-      ? fmtEUR(scrapV) + shareTxt(scrapV, grand('scrapValue'))
-      : unitsTxt(scrapU) + shareTxt(scrapU, grand('scrap'));
+      ? fmtEUR(scrapV) + pctOf(scrapV, cur.totRevenue)
+      : unitsTxt(scrapU) + pctOf(scrapU, cur.totUnits);
     document.getElementById('kpiScrapUnits').textContent = hasCost
-      ? unitsTxt(scrapU) + shareTxt(scrapU, grand('scrap')) : '';
-    document.getElementById('kpiScrapSub').textContent =
-      scrapDenom ? (scrapNum/scrapDenom*100).toFixed(1) + '% of sales' : '—';
+      ? unitsTxt(scrapU) + pctOf(scrapU, cur.totUnits) : '';
+    document.getElementById('kpiScrapSub').textContent = 'valued at product cost';
 
-    // Stock adjustments (net): € (share), units (share), % of sales
+    // Stock adjustments (net): same treatment.
     const adjPosU = sumField(scopePeriods, store, selectedWh, 'adjPos');
     const adjNegU = sumField(scopePeriods, store, selectedWh, 'adjNeg');
     const adjPosV = sumField(scopePeriods, store, selectedWh, 'adjPosValue');
     const adjNegV = sumField(scopePeriods, store, selectedWh, 'adjNegValue');
     const netU = adjPosU - adjNegU;
     const netV = adjPosV - adjNegV;
-    const grandNet = hasCost ? (grand('adjPosValue') - grand('adjNegValue')) : (grand('adjPos') - grand('adjNeg'));
     const netMain = hasCost ? netV : netU;
-    const netShare = (grandNet !== 0 && Math.sign(grandNet) === Math.sign(netMain))
-      ? ' (' + (netMain/grandNet*100).toFixed(1) + '%)' : '';
     document.getElementById('kpiAdj').innerHTML =
-      '<span class="' + (netMain>=0?'pos':'neg') + '">' + (netMain>=0?'+':'') + fmt(netMain) + netShare + '</span>';
+      '<span class="' + (netMain>=0?'pos':'neg') + '">' + (netMain>=0?'+':'') + fmt(netMain) +
+      (hasCost ? pctOf(Math.abs(netV), cur.totRevenue) : pctOf(Math.abs(netU), cur.totUnits)) + '</span>';
     document.getElementById('kpiAdjUnits').textContent = hasCost
-      ? (netU>=0?'+':'') + unitsTxt(netU) : '';
-    const adjDenom = percentBasis === 'value' ? cur.totRevenue : cur.totUnits;
-    const adjNum = percentBasis === 'value' ? netV : netU;
+      ? (netU>=0?'+':'') + unitsTxt(netU) + pctOf(Math.abs(netU), cur.totUnits) : '';
     document.getElementById('kpiAdjSub').textContent =
-      (adjDenom ? (adjNum/adjDenom*100).toFixed(1) + '% of sales · ' : '') +
       '+' + fmt(hasCost?adjPosV:adjPosU) + ' / −' + fmt(hasCost?adjNegV:adjNegU);
 
     renderKpiDelta('kpiRevenueDelta', cur.totRevenue, prevTotals && prevTotals.totRevenue, fmtEUR, true);
