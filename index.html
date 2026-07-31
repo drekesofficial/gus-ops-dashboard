@@ -1925,15 +1925,15 @@
     document.getElementById('kpiRevenue').textContent = fmtEUR(cur.totRevenue) + shareTxt(cur.totRevenue, grand('revenue'));
     document.getElementById('kpiUnits').textContent = unitsTxt(cur.totUnits) + shareTxt(cur.totUnits, grand('units'));
 
-    // Scrap: each line as % of the matching sales figure (€ vs sales €, units vs sales units).
-    const pctOf = (v, total) => total > 0 ? ' (' + (v/total*100).toFixed(1) + '% of sales)' : '';
+    // Scrap: each line as % of the matching sales figure - € vs sales €, units vs units sold.
+    const pctOf = (v, total, what) => total > 0 ? ' (' + (v/total*100).toFixed(1) + '% of ' + what + ')' : '';
     const scrapU = sumField(scopePeriods, store, selectedWh, 'scrap');
     const scrapV = sumField(scopePeriods, store, selectedWh, 'scrapValue');
     document.getElementById('kpiScrap').textContent = hasCost
-      ? fmtEUR(scrapV) + pctOf(scrapV, cur.totRevenue)
-      : unitsTxt(scrapU) + pctOf(scrapU, cur.totUnits);
+      ? fmtEUR(scrapV) + pctOf(scrapV, cur.totRevenue, 'sales')
+      : unitsTxt(scrapU) + pctOf(scrapU, cur.totUnits, 'units sold');
     document.getElementById('kpiScrapUnits').textContent = hasCost
-      ? unitsTxt(scrapU) + pctOf(scrapU, cur.totUnits) : '';
+      ? unitsTxt(scrapU) + pctOf(scrapU, cur.totUnits, 'units sold') : '';
     document.getElementById('kpiScrapSub').textContent = 'valued at product cost';
 
     // Stock adjustments (net): same treatment.
@@ -1946,9 +1946,9 @@
     const netMain = hasCost ? netV : netU;
     document.getElementById('kpiAdj').innerHTML =
       '<span class="' + (netMain>=0?'pos':'neg') + '">' + (netMain>=0?'+':'') + fmt(netMain) +
-      (hasCost ? pctOf(Math.abs(netV), cur.totRevenue) : pctOf(Math.abs(netU), cur.totUnits)) + '</span>';
+      (hasCost ? pctOf(Math.abs(netV), cur.totRevenue, 'sales') : pctOf(Math.abs(netU), cur.totUnits, 'units sold')) + '</span>';
     document.getElementById('kpiAdjUnits').textContent = hasCost
-      ? (netU>=0?'+':'') + unitsTxt(netU) + pctOf(Math.abs(netU), cur.totUnits) : '';
+      ? (netU>=0?'+':'') + unitsTxt(netU) + pctOf(Math.abs(netU), cur.totUnits, 'units sold') : '';
     document.getElementById('kpiAdjSub').textContent =
       '+' + fmt(hasCost?adjPosV:adjPosU) + ' / −' + fmt(hasCost?adjNegV:adjNegU);
 
