@@ -475,11 +475,6 @@
         <button data-gran="week" class="active">Week</button>
         <button data-gran="month">Month</button>
       </div>
-      <div class="seg" id="valueSeg">
-        <button data-mode="units" class="active">Units</button>
-        <button data-mode="eur">€ (cost)</button>
-        <button data-mode="percent">% of sales</button>
-      </div>
       <div id="warehousePicker" class="period-picker"></div>
       <div id="categoryPicker" class="period-picker"></div>
       <div id="mainRangePicker"></div>
@@ -507,6 +502,7 @@
       <div class="kpi scrap">
         <div class="label">Scrap (waste)</div>
         <div class="value" id="kpiScrap">—</div>
+        <div class="value" id="kpiScrapUnits" style="font-size:19px;margin-top:2px;">—</div>
         <div class="sub" id="kpiScrapSub">—</div>
         <div class="kpi-delta" id="kpiScrapDelta"></div>
         <div class="kpi-spark" id="sparkScrap"></div>
@@ -514,6 +510,7 @@
       <div class="kpi adj">
         <div class="label">Stock adjustments (net)</div>
         <div class="value" id="kpiAdj">—</div>
+        <div class="value" id="kpiAdjUnits" style="font-size:19px;margin-top:2px;">—</div>
         <div class="sub" id="kpiAdjSub">—</div>
         <div class="kpi-delta" id="kpiAdjDelta"></div>
         <div class="kpi-spark" id="sparkAdj"></div>
@@ -772,7 +769,6 @@
   let ALL_WAREHOUSES = [];
   let ALL_CATEGORIES = [];
   let currentGran = 'week';
-  let currentValueMode = 'units'; // 'units' | 'eur' | 'percent'
   let selectedCategories = null; // null = all categories (no filter); otherwise a Set
 
   // ---------- Supabase (primary data source) ----------
@@ -890,14 +886,7 @@
 
   // Hides the € (cost) toggle when there is no cost data, and bounces the user back to
   // Units if they were already on € when the data source changed.
-  function applyCostAvailability(){
-    const euroBtn = document.querySelector('#valueSeg button[data-mode="eur"]');
-    euroBtn.style.display = HAS_COST ? '' : 'none';
-    if(!HAS_COST && currentValueMode === 'eur'){
-      currentValueMode = 'units';
-      document.querySelectorAll('#valueSeg button').forEach(b => b.classList.toggle('active', b.dataset.mode==='units'));
-    }
-  }
+  function applyCostAvailability(){ /* value-mode toggle removed - tiles show all representations */ }
 
   function computeFullWarehouseSet(){
     const set = new Set();
@@ -1323,14 +1312,6 @@
     if(!btn) return;
     currentGran = btn.dataset.gran;
     document.querySelectorAll('#granSeg button').forEach(b=>b.classList.toggle('active', b===btn));
-    renderAll();
-  });
-
-  document.getElementById('valueSeg').addEventListener('click', e=>{
-    const btn = e.target.closest('button');
-    if(!btn) return;
-    currentValueMode = btn.dataset.mode;
-    document.querySelectorAll('#valueSeg button').forEach(b=>b.classList.toggle('active', b===btn));
     renderAll();
   });
 
@@ -1841,9 +1822,6 @@
     };
 
     const hasCost = HAS_COST;
-    const mode = currentValueMode; // 'units' | 'eur' | 'percent'
-    const useEur = mode === 'eur' && hasCost;
-    const usePercent = mode === 'percent';
     // Percent basis: relative to revenue (€) when cost data is available, otherwise relative to units sold.
     const percentBasis = hasCost ? 'value' : 'units';
 
@@ -1886,33 +1864,62 @@
     document.getElementById('revCompareLegend').textContent =
       compareRange ? '(grey: ' + fmtRange(compareRange) + ')' : '';
 
-    // ---- KPI values follow the Units / € / % toggle ----
-    const cur = computeKpiTotals(scopePeriods, store, selectedWh, mode, hasCost, percentBasis);
-    const prevTotals = prevPeriods.length ? computeKpiTotals(prevPeriods, store, selectedWh, mode, hasCost, percentBasis) : null;
-    const fmt = usePercent ? fmtPct : (useEur ? fmtEUR : (n => fmtNum(n) + ' u.'));
+    // ---- KPI tiles: every representation stacked (€ / units / % of sales) ----
+    // "cur"/"prevTotals" are €-based (falls back to units when no cost data) and feed
+    // the deltas, sparklines and insight banner.
+    const cur = computeKpiTotals(scopePeriods, store, selectedWh, 'eur', hasCost, percentBasis);
+    const prevTotals = prevPeriods.length ? computeKpiTotals(prevPeriods, store, selectedWh, 'eur', hasCost, percentBasis) : null;
+    const fmt = hasCost ? fmtEUR : (n => fmtNum(n) + ' u.');
+    const unitsTxt = n => fmtNum(n) + ' u.';
 
-    // Total sales tile: € and units stacked, each with the selection's share of the
-    // grand total (all fridges, incl. unchecked ones) for the same range in brackets.
-    const grandRev = sumField(scopePeriods, store, '__ALL__', 'revenue');
-    const grandUnits = sumField(scopePeriods, store, '__ALL__', 'units');
+    // Selection's share of the grand total (all fridges, incl. unchecked) in brackets.
+    const grand = f => sumField(scopePeriods, store, '__ALL__', f);
     const shareTxt = (v, total) => total > 0 ? ' (' + (v/total*100).toFixed(1) + '%)' : '';
-    document.getElementById('kpiRevenue').textContent = fmtEUR(cur.totRevenue) + shareTxt(cur.totRevenue, grandRev);
-    document.getElementById('kpiUnits').textContent = fmtNum(cur.totUnits) + ' u.' + shareTxt(cur.totUnits, grandUnits);
-    document.getElementById('kpiScrap').textContent = fmt(cur.totScrap);
-    const scrapUnitsTotal = sumField(scopePeriods, store, selectedWh, 'scrap');
-    document.getElementById('kpiScrapSub').textContent = usePercent
-      ? ('vs ' + (percentBasis==='value' ? 'revenue' : 'units sold') + ' — ' + fmtNum(scrapUnitsTotal) + ' u.')
-      : (useEur ? (fmtNum(scrapUnitsTotal) + ' units') : (cur.totUnits ? ((cur.totScrap/(cur.totUnits+cur.totScrap)*100).toFixed(1) + '% of total flow') : '—'));
+
+    // Total sales
+    document.getElementById('kpiRevenue').textContent = fmtEUR(cur.totRevenue) + shareTxt(cur.totRevenue, grand('revenue'));
+    document.getElementById('kpiUnits').textContent = unitsTxt(cur.totUnits) + shareTxt(cur.totUnits, grand('units'));
+
+    // Scrap: € (share), units (share), % of sales
+    const scrapU = sumField(scopePeriods, store, selectedWh, 'scrap');
+    const scrapV = sumField(scopePeriods, store, selectedWh, 'scrapValue');
+    const scrapDenom = percentBasis === 'value' ? cur.totRevenue : cur.totUnits;
+    const scrapNum = percentBasis === 'value' ? scrapV : scrapU;
+    document.getElementById('kpiScrap').textContent = hasCost
+      ? fmtEUR(scrapV) + shareTxt(scrapV, grand('scrapValue'))
+      : unitsTxt(scrapU) + shareTxt(scrapU, grand('scrap'));
+    document.getElementById('kpiScrapUnits').textContent = hasCost
+      ? unitsTxt(scrapU) + shareTxt(scrapU, grand('scrap')) : '';
+    document.getElementById('kpiScrapSub').textContent =
+      scrapDenom ? (scrapNum/scrapDenom*100).toFixed(1) + '% of sales' : '—';
+
+    // Stock adjustments (net): € (share), units (share), % of sales
+    const adjPosU = sumField(scopePeriods, store, selectedWh, 'adjPos');
+    const adjNegU = sumField(scopePeriods, store, selectedWh, 'adjNeg');
+    const adjPosV = sumField(scopePeriods, store, selectedWh, 'adjPosValue');
+    const adjNegV = sumField(scopePeriods, store, selectedWh, 'adjNegValue');
+    const netU = adjPosU - adjNegU;
+    const netV = adjPosV - adjNegV;
+    const grandNet = hasCost ? (grand('adjPosValue') - grand('adjNegValue')) : (grand('adjPos') - grand('adjNeg'));
+    const netMain = hasCost ? netV : netU;
+    const netShare = (grandNet !== 0 && Math.sign(grandNet) === Math.sign(netMain))
+      ? ' (' + (netMain/grandNet*100).toFixed(1) + '%)' : '';
     document.getElementById('kpiAdj').innerHTML =
-      '<span class="' + (cur.netAdj>=0?'pos':'neg') + '">' + (cur.netAdj>=0?'+':'') + fmt(cur.netAdj) + '</span>';
-    document.getElementById('kpiAdjSub').textContent = '+' + fmt(cur.totAdjPos) + ' / -' + fmt(cur.totAdjNeg);
+      '<span class="' + (netMain>=0?'pos':'neg') + '">' + (netMain>=0?'+':'') + fmt(netMain) + netShare + '</span>';
+    document.getElementById('kpiAdjUnits').textContent = hasCost
+      ? (netU>=0?'+':'') + unitsTxt(netU) : '';
+    const adjDenom = percentBasis === 'value' ? cur.totRevenue : cur.totUnits;
+    const adjNum = percentBasis === 'value' ? netV : netU;
+    document.getElementById('kpiAdjSub').textContent =
+      (adjDenom ? (adjNum/adjDenom*100).toFixed(1) + '% of sales · ' : '') +
+      '+' + fmt(hasCost?adjPosV:adjPosU) + ' / −' + fmt(hasCost?adjNegV:adjNegU);
 
     renderKpiDelta('kpiRevenueDelta', cur.totRevenue, prevTotals && prevTotals.totRevenue, fmtEUR, true);
     renderKpiDelta('kpiScrapDelta', cur.totScrap, prevTotals && prevTotals.totScrap, fmt, false);
     renderKpiDelta('kpiAdjDelta', cur.netAdj, prevTotals && prevTotals.netAdj, fmt, true);
 
     // ---- Sparklines: the selected range itself, one point per period ----
-    const sparkTotals = scopePeriods.map(p => computeKpiTotals([p], store, selectedWh, mode, hasCost, percentBasis));
+    const sparkTotals = scopePeriods.map(p => computeKpiTotals([p], store, selectedWh, 'eur', hasCost, percentBasis));
     renderSparkline('sparkRevenue', sparkTotals.map(t=>t.totRevenue), getVar('--teal'));
     renderSparkline('sparkScrap', sparkTotals.map(t=>t.totScrap), getVar('--amber'));
     renderSparkline('sparkAdj', sparkTotals.map(t=>t.netAdj), getVar('--rose'));
