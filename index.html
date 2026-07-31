@@ -1639,7 +1639,7 @@
 
   const today = () => startOfDay(new Date());
   const MAIN_PRESETS = [
-    { label:'Today', range: () => ({ start: today(), end: today() }) },
+    { label:'Yesterday', range: () => ({ start: addDays(today(), -1), end: addDays(today(), -1) }) },
     { label:'This week', range: () => { const t=today(); const mon=addDays(t, -((t.getDay()+6)%7)); return { start:mon, end:t }; } },
     { label:'Last week', range: () => { const t=today(); const mon=addDays(t, -((t.getDay()+6)%7) - 7); return { start:mon, end:addDays(mon, 6) }; } },
     { label:'This month', range: () => ({ start: new Date(today().getFullYear(), today().getMonth(), 1), end: today() }) },
