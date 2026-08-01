@@ -482,6 +482,7 @@
         <button data-view="ops" class="active">Operations</button>
         <button data-view="cust">Customers</button>
         <button data-view="assort">Assortment</button>
+        <button data-view="b2b">B2B Customers</button>
       </div>
     </div>
 
@@ -746,6 +747,57 @@
 
       <footer class="note">Scrap and net stock loss are valued at product cost. "Net stock loss" = negative minus positive stock adjustments; a product can show negative loss (net found stock).</footer>
     </div><!-- /assortView -->
+
+    <div id="b2bView" style="display:none;">
+      <div class="controls sticky">
+        <div id="b2bRangePicker"></div>
+        <input type="text" id="b2bSearch" placeholder="Search customer…"
+               style="font-family:Raleway,sans-serif;font-size:13px;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 12px;min-width:220px;" />
+        <div class="spacer"></div>
+        <span class="file-status" id="b2bRangeLabel"></span>
+      </div>
+
+      <div class="kpi-row">
+        <div class="kpi rev">
+          <div class="label">Total revenue</div>
+          <div class="value" id="bkpiTotal">—</div>
+          <div class="sub">fridge sales + subscriptions + room service</div>
+        </div>
+        <div class="kpi units">
+          <div class="label">Fridge sales</div>
+          <div class="value" id="bkpiFridge">—</div>
+          <div class="sub" id="bkpiFridgeSub">—</div>
+        </div>
+        <div class="kpi scrap">
+          <div class="label">Subscription fees</div>
+          <div class="value" id="bkpiFees">—</div>
+          <div class="sub" id="bkpiFeesSub">—</div>
+        </div>
+        <div class="kpi adj">
+          <div class="label">Room service</div>
+          <div class="value" id="bkpiRoom">—</div>
+          <div class="sub" id="bkpiRoomSub">—</div>
+        </div>
+      </div>
+
+      <div class="chart-card full" style="margin-bottom:22px;">
+        <h3>Revenue per B2B customer <span id="b2bScope" style="font-weight:400;color:var(--ink-soft);"></span></h3>
+        <p style="font-size:12.5px;color:var(--ink-soft);margin:0 0 10px;">Click a customer to see its monthly revenue mix. Click a column header to sort.</p>
+        <div class="table-scroll" style="max-height:520px;"><table class="data" id="b2bTable"></table></div>
+      </div>
+
+      <div class="chart-card full" id="b2bDetailCard" style="display:none;margin-bottom:22px;">
+        <div class="detail-header">
+          <h3 id="b2bDetailTitle">—</h3>
+          <button class="btn ghost" id="b2bDetailClose" type="button">Close</button>
+        </div>
+        <div class="wrap" style="height:300px;"><div id="chartB2bTrend" class="chart-svg"></div></div>
+        <div id="legendB2bTrend" class="stack-legend"></div>
+        <div class="margin-note" id="b2bDetailFridges"></div>
+      </div>
+
+      <footer class="note">Fridge sales come from fridge orders (attributed to the company hosting the fridge). Subscription fees and room service come from posted invoices on the FEES and ROOM journals; credit notes are deducted. Amounts are untaxed. Months are bucketed by invoice date.</footer>
+    </div><!-- /b2bView -->
   </div>
 
 </div>
@@ -2554,8 +2606,10 @@
     document.getElementById('opsView').style.display = view === 'ops' ? '' : 'none';
     document.getElementById('custView').style.display = view === 'cust' ? '' : 'none';
     document.getElementById('assortView').style.display = view === 'assort' ? '' : 'none';
+    document.getElementById('b2bView').style.display = view === 'b2b' ? '' : 'none';
     if(view === 'cust' && !custStarted){ custStarted = true; populateCustWarehouseSelect(); custRefresh(); }
     if(view === 'assort' && !assortStarted){ assortStarted = true; assortInit(); assortRefresh(); }
+    if(view === 'b2b' && !b2bStarted){ b2bStarted = true; b2bInit(); b2bRefresh(); }
   });
 
   document.getElementById('custGranSeg').addEventListener('click', e => {
@@ -2946,6 +3000,166 @@
   }
 
   // ---------- Auth gate ----------
+  // ---------- B2B Customers tab ----------
+  let b2bStarted = false;
+  let b2bRange = { start: new Date(new Date().getFullYear(), 0, 1), end: startOfDay(new Date()) };
+  let b2bRows = [];
+  let b2bSort = { col: 'total_revenue', dir: -1 };
+  let b2bMeta = null;
+
+  const ymKey = d => d.getFullYear()*100 + (d.getMonth()+1);
+  const ymLabel = k => new Date(Math.floor(k/100), k%100 - 1, 1)
+    .toLocaleDateString('en-GB', { month:'short', year:'numeric' });
+  function ymRangeKeys(range){
+    const keys = [];
+    let y = range.start.getFullYear(), m = range.start.getMonth()+1;
+    const endK = ymKey(range.end);
+    while(y*100+m <= endK){ keys.push(y*100+m); m++; if(m>12){ m=1; y++; } }
+    return keys;
+  }
+
+  function b2bInit(){
+    createRangePicker('b2bRangePicker', () => b2bRange, r => { b2bRange = r; b2bRefresh(); }, MAIN_PRESETS);
+    document.getElementById('b2bSearch').addEventListener('input', renderB2bTable);
+    document.getElementById('b2bDetailClose').addEventListener('click', () => {
+      document.getElementById('b2bDetailCard').style.display = 'none';
+    });
+  }
+
+  let b2bSeq = 0;
+  async function b2bRefresh(){
+    if(DATA_SOURCE !== 'supabase') return;
+    const seq = ++b2bSeq;
+    document.getElementById('b2bRangeLabel').textContent = 'Loading…';
+    try{
+      const pFrom = ymKey(b2bRange.start), pTo = ymKey(b2bRange.end);
+      const [rows, meta] = await Promise.all([
+        rpc('get_b2b_summary', { p_from: pFrom, p_to: pTo }),
+        b2bMeta ? Promise.resolve(b2bMeta) : rpc('get_b2b_meta')
+      ]);
+      if(seq !== b2bSeq) return;
+      b2bMeta = meta;
+      b2bRows = rows.map(r => ({
+        partner_id: r.partner_id,
+        customer_name: r.customer_name,
+        fridges: Number(r.fridges) || 0,
+        fridge_revenue: Number(r.fridge_revenue) || 0,
+        fees_revenue: Number(r.fees_revenue) || 0,
+        room_revenue: Number(r.room_revenue) || 0,
+        total_revenue: Number(r.total_revenue) || 0
+      }));
+      document.getElementById('b2bRangeLabel').textContent = fmtRange(b2bRange);
+      document.getElementById('b2bScope').textContent = '(' + fmtRange(b2bRange) + ', by month of invoice/order)';
+
+      const tot = f => b2bRows.reduce((a,r)=>a+r[f],0);
+      const grand = tot('total_revenue');
+      const shr = v => grand ? ' (' + (v/grand*100).toFixed(1) + '% of total)' : '';
+      document.getElementById('bkpiTotal').textContent = fmtEUR(grand);
+      document.getElementById('bkpiFridge').textContent = fmtEUR(tot('fridge_revenue'));
+      document.getElementById('bkpiFridgeSub').textContent = shr(tot('fridge_revenue')).replace(/[()]/g,'') || '—';
+      document.getElementById('bkpiFees').textContent = fmtEUR(tot('fees_revenue'));
+      document.getElementById('bkpiFeesSub').textContent = shr(tot('fees_revenue')).replace(/[()]/g,'') || '—';
+      document.getElementById('bkpiRoom').textContent = fmtEUR(tot('room_revenue'));
+      document.getElementById('bkpiRoomSub').textContent = shr(tot('room_revenue')).replace(/[()]/g,'') || '—';
+
+      renderB2bTable();
+    }catch(err){
+      console.error(err);
+      document.getElementById('b2bRangeLabel').textContent = 'Failed to load: ' + err.message;
+    }
+  }
+
+  const B2B_COLS = [
+    ['customer_name','Customer'], ['fridges','Fridges'], ['fridge_revenue','Fridge sales'],
+    ['fees_revenue','Subscription fees'], ['room_revenue','Room service'],
+    ['total_revenue','Total revenue'], ['share','% of total']
+  ];
+
+  function renderB2bTable(){
+    const table = document.getElementById('b2bTable');
+    clearNode(table);
+    const q = document.getElementById('b2bSearch').value.trim().toLowerCase();
+    const grand = b2bRows.reduce((a,r)=>a+r.total_revenue,0);
+    let rows = b2bRows.filter(r => !q || (r.customer_name||'').toLowerCase().includes(q));
+    const col = b2bSort.col;
+    rows.sort((a,b) => {
+      const va = col === 'share' ? a.total_revenue : a[col];
+      const vb = col === 'share' ? b.total_revenue : b[col];
+      if(typeof va === 'string') return b2bSort.dir * va.localeCompare(vb);
+      return b2bSort.dir * (va - vb);
+    });
+
+    const thead = document.createElement('thead');
+    const trh = document.createElement('tr');
+    B2B_COLS.forEach(([key, label]) => {
+      const th = document.createElement('th');
+      th.textContent = label + (b2bSort.col === key ? (b2bSort.dir < 0 ? ' ▾' : ' ▴') : '');
+      if(key !== 'customer_name') th.style.textAlign = 'right';
+      th.addEventListener('click', () => {
+        if(b2bSort.col === key) b2bSort.dir *= -1;
+        else b2bSort = { col: key, dir: key === 'customer_name' ? 1 : -1 };
+        renderB2bTable();
+      });
+      trh.appendChild(th);
+    });
+    thead.appendChild(trh);
+    table.appendChild(thead);
+
+    const tbody = document.createElement('tbody');
+    rows.forEach(r => {
+      const tr = document.createElement('tr');
+      tr.style.cursor = 'pointer';
+      const cells = [
+        r.customer_name,
+        fmtNum(r.fridges),
+        fmtEUR(r.fridge_revenue),
+        fmtEUR(r.fees_revenue),
+        fmtEUR(r.room_revenue),
+        fmtEUR(r.total_revenue),
+        grand ? (r.total_revenue/grand*100).toFixed(1) + '%' : '—'
+      ];
+      cells.forEach((c,i) => {
+        const td = document.createElement('td');
+        td.textContent = c;
+        if(i > 0) td.style.textAlign = 'right';
+        if(i === 5) td.style.fontWeight = '600';
+        tr.appendChild(td);
+      });
+      tr.addEventListener('click', () => b2bShowDetail(r));
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+  }
+
+  async function b2bShowDetail(row){
+    const card = document.getElementById('b2bDetailCard');
+    card.style.display = '';
+    document.getElementById('b2bDetailTitle').textContent = row.customer_name + ' — monthly revenue mix';
+    card.scrollIntoView({ behavior:'smooth', block:'nearest' });
+    try{
+      const pFrom = ymKey(b2bRange.start), pTo = ymKey(b2bRange.end);
+      const trend = await rpc('get_b2b_trend', { p_partner: row.partner_id, p_from: pFrom, p_to: pTo });
+      const byK = new Map(trend.map(t => [Number(t.period_key), t]));
+      const keys = ymRangeKeys(b2bRange);
+      const labels = keys.map(ymLabel);
+      const val = (k, f) => { const t = byK.get(k); return t ? Math.max(Number(t[f])||0, 0) : 0; };
+      const series = [
+        { label:'Fridge sales', color: getVar('--kale'), data: keys.map(k => val(k,'fridge_revenue')) },
+        { label:'Subscription fees', color: getVar('--coral'), data: keys.map(k => val(k,'fees_revenue')) },
+        { label:'Room service', color: getVar('--blueberry'), data: keys.map(k => val(k,'room_revenue')) }
+      ];
+      renderChart('chartB2bTrend', labels, series, { stacked:true, yFormat: v=>fmtEUR(v), tooltipFormat: v=>fmtEUR(v) });
+      renderStackLegend('legendB2bTrend', series.filter(d => d.data.some(v=>v>0)).map(d => [d.label, d.color]));
+      const meta = (b2bMeta || []).find(m => m.partner_id === row.partner_id);
+      const fridges = meta && meta.fridges ? meta.fridges : [];
+      document.getElementById('b2bDetailFridges').textContent =
+        fridges.length ? 'Fridges: ' + fridges.map(fridgeLabel).join(', ') : 'No fridge linked to this customer.';
+    }catch(err){
+      console.error(err);
+      document.getElementById('b2bDetailFridges').textContent = 'Failed to load trend: ' + err.message;
+    }
+  }
+
   const loginScreen = document.getElementById('loginScreen');
   const loginForm = document.getElementById('loginForm');
   const loginError = document.getElementById('loginError');

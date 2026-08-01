@@ -182,23 +182,115 @@ def sync_products(odoo, sb, now_iso):
     return len(out)
 
 
+def commercial_partners(odoo, partner_ids):
+    """Map partner id -> (commercial_partner_id, commercial name) in one batched read."""
+    ids = sorted({p for p in partner_ids if p})
+    if not ids:
+        return {}
+    rows = odoo.call('res.partner', 'read', [ids], fields=['commercial_partner_id'])
+    return {r['id']: (r['commercial_partner_id'][0], r['commercial_partner_id'][1])
+            for r in rows if isinstance(r.get('commercial_partner_id'), (list, tuple))}
+
+
 def sync_warehouses(odoo, sb, now_iso):
     log('Syncing warehouses...')
-    rows = odoo.read_all('stock.warehouse', [], ['name', 'code', 'lot_stock_id'])
-    out, stock_loc_to_wh = [], {}
+    rows = odoo.read_all('stock.warehouse', [], ['name', 'code', 'lot_stock_id', 'partner_id'])
+    # Fridge -> B2B company: warehouse partner normalized to its commercial (company) partner.
+    comm = commercial_partners(odoo, [w['partner_id'][0] for w in rows
+                                      if isinstance(w.get('partner_id'), (list, tuple))])
+    out, stock_loc_to_wh, companies = [], {}, {}
     for w in rows:
         loc_name = m2o_name(w.get('lot_stock_id'))
+        pid = w['partner_id'][0] if isinstance(w.get('partner_id'), (list, tuple)) else None
+        cpid, cname = comm.get(pid, (None, None))
         out.append({
             'complete_name': w['name'],
             'warehouse_name': w['name'],
             'warehouse_code': clean(w.get('code')),
             'location_name': loc_name,
+            'partner_id': cpid,
+            'customer_name': cname,
             'synced_at': now_iso,
         })
+        if cpid:
+            companies[cpid] = cname
         if isinstance(w.get('lot_stock_id'), (list, tuple)):
             stock_loc_to_wh[w['lot_stock_id'][0]] = w['name']
     sb.upsert('warehouses', out, 'complete_name')
+    sb.upsert('b2b_customers', [{'partner_id': k, 'name': v} for k, v in companies.items()],
+              'partner_id')
     return stock_loc_to_wh
+
+
+INVOICE_JOURNALS = ['FEES', 'ROOM']
+
+
+def sync_invoice_lines(odoo, sb, since, now_iso, until=None):
+    """Customer invoice lines on the subscription-fee and room-service journals.
+    Credit notes are stored with negative amounts."""
+    log(f'Syncing invoice lines ({"/".join(INVOICE_JOURNALS)}) since {since}'
+        + (f' until {until}' if until else '') + '...')
+    domain = [('journal_id.code', 'in', INVOICE_JOURNALS),
+              ('display_type', '=', 'product'),
+              ('parent_state', '=', 'posted'),
+              ('move_id.move_type', 'in', ['out_invoice', 'out_refund']),
+              ('date', '>=', since)]
+    if until:
+        domain.append(('date', '<', until))
+    lines = odoo.read_all('account.move.line', domain,
+                          ['move_id', 'journal_id', 'partner_id', 'date', 'name',
+                           'product_id', 'quantity', 'price_subtotal', 'analytic_distribution'])
+    if not lines:
+        log('  no invoice lines in range')
+        return 0
+    move_ids = sorted({l['move_id'][0] for l in lines if isinstance(l.get('move_id'), (list, tuple))})
+    moves = {}
+    for i in range(0, len(move_ids), BATCH_ODOO):
+        for m in odoo.call('account.move', 'read', [move_ids[i:i + BATCH_ODOO]],
+                           fields=['name', 'move_type', 'commercial_partner_id', 'invoice_date', 'date']):
+            moves[m['id']] = m
+    # Analytic accounts: distribution keys are analytic account ids -> resolve names once.
+    ana_ids = set()
+    for l in lines:
+        for k in (l.get('analytic_distribution') or {}):
+            ana_ids.add(int(k))
+    ana_names = {}
+    if ana_ids:
+        for a in odoo.call('account.analytic.account', 'read', [sorted(ana_ids)], fields=['name']):
+            ana_names[a['id']] = a['name']
+    out = []
+    for l in lines:
+        mv = moves.get(l['move_id'][0] if isinstance(l.get('move_id'), (list, tuple)) else None, {})
+        move_type = mv.get('move_type') or 'out_invoice'
+        sign = -1 if move_type == 'out_refund' else 1
+        jname = m2o_name(l.get('journal_id')) or ''
+        code = 'FEES' if 'Subscription' in jname else ('ROOM' if 'Room' in jname else jname[:8])
+        dist = l.get('analytic_distribution') or {}
+        top_ana = max(dist, key=dist.get) if dist else None
+        cp = mv.get('commercial_partner_id')
+        out.append({
+            'id': l['id'],
+            'move_id': mv.get('id') or (l['move_id'][0] if isinstance(l.get('move_id'), (list, tuple)) else None),
+            'move_name': clean(mv.get('name')),
+            'journal_code': code,
+            'move_type': move_type,
+            'partner_id': cp[0] if isinstance(cp, (list, tuple)) else None,
+            'invoice_date': mv.get('invoice_date') or l.get('date'),
+            'line_name': clean(l.get('name')),
+            'product_name': m2o_name(l.get('product_id')),
+            'quantity': l.get('quantity') or 0,
+            'amount': sign * (l.get('price_subtotal') or 0),
+            'analytic': ana_names.get(int(top_ana)) if top_ana else None,
+            'synced_at': now_iso,
+        })
+    # Companies seen on invoices may not have a fridge yet - keep b2b_customers complete.
+    comps = {}
+    for m in moves.values():
+        cp = m.get('commercial_partner_id')
+        if isinstance(cp, (list, tuple)):
+            comps[cp[0]] = cp[1]
+    sb.upsert('b2b_customers', [{'partner_id': k, 'name': v} for k, v in comps.items()], 'partner_id')
+    return sb.upsert('invoice_lines', out, 'id')
 
 
 def sync_sales(odoo, sb, since, now_iso, until=None):
@@ -314,13 +406,14 @@ def main():
     stock_loc_to_wh = sync_warehouses(odoo, sb, now_iso)
     n_sales = sync_sales(odoo, sb, since, now_iso, args.until)
     n_moves = sync_stock_moves(odoo, sb, since, now_iso, stock_loc_to_wh, args.until)
+    n_inv = sync_invoice_lines(odoo, sb, since, now_iso, args.until)
 
     if args.no_refresh:
         log('Skipping rollup refresh (--no-refresh)')
     else:
         log('Refreshing ops_rollup materialized view...')
         sb.rpc('refresh_ops_rollup')
-    log(f'Done. products={n_products} sales_lines={n_sales} stock_moves={n_moves}')
+    log(f'Done. products={n_products} sales_lines={n_sales} stock_moves={n_moves} invoice_lines={n_inv}')
 
 
 if __name__ == '__main__':
