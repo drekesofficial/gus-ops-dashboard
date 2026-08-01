@@ -5,25 +5,34 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Gus Foods — Ops Dashboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Raleway:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <style>
   :root{
-    --bg:#F3F6F7;
+    /* Gus Foods brandbook palette */
+    --coral:#FD6C70;        /* Coral Carrot */
+    --vanilla:#FEF8EB;      /* Vanilla */
+    --banana:#FFF578;       /* Banana Pancake */
+    --kale:#004C45;         /* Dark Kale */
+    --kale-light:#B7E1BE;   /* Light Kale */
+    --blueberry:#4290FF;    /* Blueberry Muffin */
+    --blueberry-light:#9FC0F9;
+
+    --bg:var(--vanilla);
     --surface:#FFFFFF;
-    --ink:#152227;
-    --ink-soft:#5B6B72;
-    --line:#DFE7E9;
-    --teal:#0E7C86;
-    --teal-dark:#0A5E66;
-    --teal-pale:#E3F1F1;
-    --amber:#E2823D;
-    --amber-pale:#FBE9DA;
+    --ink:var(--kale);
+    --ink-soft:#5E7B75;
+    --line:#EBE1CC;
+    --teal:var(--kale);
+    --teal-dark:#00332E;
+    --teal-pale:#E4F2E7;
+    --amber:var(--coral);
+    --amber-pale:#FFE9E5;
     --green:#2E9E6E;
     --green-pale:#DFF3EA;
-    --rose:#D6553F;
-    --rose-pale:#FBE3DE;
+    --rose:#E04E52;
+    --rose-pale:#FFE4E2;
     --radius:14px;
   }
   *{box-sizing:border-box;}
@@ -31,39 +40,38 @@
   body{
     background:var(--bg);
     color:var(--ink);
-    font-family:'Inter',sans-serif;
+    font-family:'Raleway',sans-serif;
     -webkit-font-smoothing:antialiased;
   }
   .app{max-width:1320px;margin:0 auto;padding:28px 24px 80px;}
 
   header.top{
-    display:flex;align-items:flex-end;justify-content:space-between;
+    display:flex;align-items:center;justify-content:space-between;
     margin-bottom:28px;flex-wrap:wrap;gap:16px;
-    border-bottom:1px solid var(--line);
-    padding-bottom:20px;
+    background:var(--coral);border-radius:var(--radius);
+    padding:16px 22px;color:#fff;
   }
-  .brand{display:flex;align-items:center;gap:14px;}
+  .brand{display:flex;align-items:center;gap:16px;}
   .brand .mark{
-    width:38px;height:38px;border-radius:10px;
-    background:linear-gradient(160deg,var(--teal),var(--teal-dark));
-    position:relative;flex-shrink:0;
-  }
-  .brand .mark::after{
-    content:'';position:absolute;left:8px;top:7px;width:4px;height:24px;
-    background:var(--amber);border-radius:2px;
+    width:58px;height:46px;flex-shrink:0;
+    background:url('logo-white.svg') no-repeat center/contain;
   }
   .brand h1{
-    font-family:'Space Grotesk',sans-serif;font-size:20px;font-weight:700;
-    margin:0;letter-spacing:-0.01em;
+    font-family:'Raleway',sans-serif;font-size:20px;font-weight:800;
+    margin:0;letter-spacing:-0.01em;color:#fff;
   }
-  .brand p{margin:2px 0 0;font-size:13px;color:var(--ink-soft);}
+  .brand p{margin:2px 0 0;font-size:13px;color:rgba(255,255,255,0.85);}
+
+  header.top .file-status{color:rgba(255,255,255,0.9);}
+  header.top .btn.ghost{color:#fff;border-color:rgba(255,255,255,0.65);}
+  header.top .btn.ghost:hover{background:rgba(255,255,255,0.15);}
 
   .file-status{
     font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--ink-soft);
     display:flex;align-items:center;gap:10px;
   }
   .btn{
-    font-family:'Inter',sans-serif;font-weight:600;font-size:13.5px;
+    font-family:'Raleway',sans-serif;font-weight:600;font-size:13.5px;
     background:var(--teal);color:#fff;border:none;border-radius:9px;
     padding:10px 16px;cursor:pointer;transition:background .15s ease;
   }
@@ -82,7 +90,7 @@
   }
   #uploadScreen.dragover{border-color:var(--teal);background:var(--teal-pale);}
   #uploadScreen h2{
-    font-family:'Space Grotesk',sans-serif;font-size:24px;margin:18px 0 8px;
+    font-family:'Raleway',sans-serif;font-size:24px;margin:18px 0 8px;
   }
   #uploadScreen p{color:var(--ink-soft);font-size:14.5px;max-width:440px;line-height:1.5;margin:0 0 22px;}
   .fridge-icon{
@@ -111,13 +119,13 @@
     border-radius:10px;padding:3px;
   }
   .seg button{
-    border:none;background:transparent;font-family:'Inter';font-weight:600;
+    border:none;background:transparent;font-family:'Raleway';font-weight:600;
     font-size:13px;padding:7px 14px;border-radius:8px;cursor:pointer;color:var(--ink-soft);
   }
   .seg button.active{background:var(--teal);color:#fff;}
 
   select{
-    font-family:'Inter';font-size:13px;font-weight:500;color:var(--ink);
+    font-family:'Raleway';font-size:13px;font-weight:500;color:var(--ink);
     background:var(--surface);border:1px solid var(--line);border-radius:10px;
     padding:8px 12px;cursor:pointer;min-width:200px;
   }
@@ -143,7 +151,7 @@
     color:var(--ink-soft);margin-bottom:6px;
   }
   .kpi .value{
-    font-family:'Space Grotesk',sans-serif;font-size:26px;font-weight:700;
+    font-family:'Raleway',sans-serif;font-size:26px;font-weight:700;
   }
   .kpi .sub{font-size:12px;color:var(--ink-soft);margin-top:4px;font-family:'IBM Plex Mono',monospace;}
 
@@ -156,7 +164,7 @@
   }
   .chart-card.full{grid-column:1/-1;}
   .chart-card h3{
-    font-family:'Space Grotesk',sans-serif;font-size:15px;margin:0 0 14px;font-weight:600;
+    font-family:'Raleway',sans-serif;font-size:15px;margin:0 0 14px;font-weight:600;
   }
   .chart-card .card-head{
     display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px;
@@ -166,7 +174,7 @@
 
   .period-picker{position:relative;}
   .period-picker-btn{
-    font-family:'Inter';font-size:12.5px;font-weight:500;color:var(--ink);
+    font-family:'Raleway';font-size:12.5px;font-weight:500;color:var(--ink);
     background:var(--surface);border:1px solid var(--line);border-radius:10px;
     padding:8px 12px;cursor:pointer;min-width:170px;text-align:left;
     display:flex;align-items:center;justify-content:space-between;gap:8px;
@@ -183,7 +191,7 @@
     display:flex;flex-wrap:wrap;gap:6px;padding:4px 6px 8px;border-bottom:1px solid var(--line);margin-bottom:6px;
   }
   .period-picker-actions button{
-    font-family:'Inter';font-size:11px;font-weight:600;color:var(--teal-dark);
+    font-family:'Raleway';font-size:11px;font-weight:600;color:var(--teal-dark);
     background:var(--teal-pale);border:none;border-radius:6px;padding:4px 8px;cursor:pointer;
   }
   .period-picker-option{
@@ -201,7 +209,7 @@
     box-shadow:0 6px 18px rgba(21,34,39,0.22);z-index:6;line-height:1.55;
     transform:translate(-6px,-100%);
   }
-  .chart-tooltip .tt-label{font-family:'Inter',sans-serif;font-weight:600;display:block;margin-bottom:2px;}
+  .chart-tooltip .tt-label{font-family:'Raleway',sans-serif;font-weight:600;display:block;margin-bottom:2px;}
 
   table.data{
     width:100%;border-collapse:collapse;font-size:13px;
@@ -216,7 +224,7 @@
     font-size:12.5px;
   }
   table.data tbody td:first-child, table.data tbody td:nth-child(2){
-    font-family:'Inter';font-size:13px;
+    font-family:'Raleway';font-size:13px;
   }
   table.data tbody tr:hover{background:#FAFCFC;}
   .table-scroll{max-height:420px;overflow:auto;border-radius:10px;}
@@ -239,7 +247,7 @@
   }
   table.matrix tbody th{
     position:sticky;left:0;background:var(--surface);z-index:1;text-align:left;
-    font-family:'Inter';font-size:12px;font-weight:500;max-width:170px;overflow:hidden;
+    font-family:'Raleway';font-size:12px;font-weight:500;max-width:170px;overflow:hidden;
     text-overflow:ellipsis;white-space:nowrap;border-right:2px solid var(--line);
   }
   table.matrix thead th:first-child{position:sticky;left:0;top:0;z-index:3;background:var(--surface);}
@@ -268,7 +276,7 @@
     border-bottom:none;border-top:2px solid var(--ink);margin-top:4px;padding-top:12px;
   }
   .margin-row.total-row span:first-child{color:var(--ink);font-weight:700;font-size:15px;}
-  .margin-row.total-row span:last-child{font-size:20px;font-weight:700;font-family:'Space Grotesk',sans-serif;}
+  .margin-row.total-row span:last-child{font-size:20px;font-weight:700;font-family:'Raleway',sans-serif;}
   .margin-note{font-size:12px;color:var(--ink-soft);margin-top:10px;}
 
   footer.note{
@@ -327,7 +335,7 @@
   /* ---------- New: fridges-to-watch movers grid ---------- */
   .movers-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:24px;}
   .movers-col h4{
-    font-family:'Inter';font-size:12px;text-transform:uppercase;letter-spacing:.05em;
+    font-family:'Raleway';font-size:12px;text-transform:uppercase;letter-spacing:.05em;
     color:var(--ink-soft);margin:0 0 10px;font-weight:600;
   }
   .movers-row{
@@ -348,7 +356,7 @@
   /* ---------- Calendar range picker ---------- */
   .cal-picker{position:relative;}
   .cal-btn{
-    font-family:'Inter';font-size:13px;font-weight:500;color:var(--ink);
+    font-family:'Raleway';font-size:13px;font-weight:500;color:var(--ink);
     background:var(--surface);border:1px solid var(--line);border-radius:10px;
     padding:8px 12px;cursor:pointer;display:flex;align-items:center;gap:8px;white-space:nowrap;
   }
@@ -362,14 +370,14 @@
   .cal-picker.open .cal-panel{display:flex;gap:18px;}
   .cal-presets{display:flex;flex-direction:column;gap:2px;min-width:130px;padding-right:14px;border-right:1px solid var(--line);}
   .cal-presets button{
-    text-align:left;font-family:'Inter';font-size:13.5px;font-weight:500;color:var(--ink);
+    text-align:left;font-family:'Raleway';font-size:13.5px;font-weight:500;color:var(--ink);
     background:transparent;border:none;border-radius:8px;padding:8px 10px;cursor:pointer;
   }
   .cal-presets button:hover{background:var(--teal-pale);}
   .cal-months{display:flex;gap:22px;}
   .cal-month{width:238px;}
   .cal-month-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:6px;}
-  .cal-month-head .cal-title{font-family:'Inter';font-weight:600;font-size:13.5px;display:flex;gap:6px;}
+  .cal-month-head .cal-title{font-family:'Raleway';font-weight:600;font-size:13.5px;display:flex;gap:6px;}
   .cal-month-head .cal-title span{background:var(--bg);border-radius:7px;padding:3px 8px;}
   .cal-nav{
     background:transparent;border:none;font-size:15px;cursor:pointer;color:var(--ink);
@@ -379,13 +387,13 @@
   .cal-grid{display:grid;grid-template-columns:repeat(7,34px);}
   .cal-grid .dow{font-size:11px;font-weight:600;color:var(--ink-soft);text-align:center;padding:4px 0;}
   .cal-day{
-    font-family:'Inter';font-size:12.5px;text-align:center;padding:7px 0;cursor:pointer;
+    font-family:'Raleway';font-size:12.5px;text-align:center;padding:7px 0;cursor:pointer;
     border:none;background:transparent;color:var(--ink);
   }
   .cal-day.other{color:#C3CDD0;}
   .cal-day:hover{background:var(--teal-pale);border-radius:8px;}
-  .cal-day.in-range{background:#F0EBE4;}
-  .cal-day.edge{background:#2A1F14;color:#fff;border-radius:9px;font-weight:600;}
+  .cal-day.in-range{background:var(--teal-pale);}
+  .cal-day.edge{background:var(--kale);color:#fff;border-radius:9px;font-weight:600;}
   .cal-day.range-start{border-radius:9px 0 0 9px;}
   .cal-day.range-end{border-radius:0 9px 9px 0;}
   .cal-day.range-start.range-end{border-radius:9px;}
@@ -396,11 +404,11 @@
     text-align:center;padding:90px 20px;background:var(--surface);
     border:1px solid var(--line);border-radius:20px;
   }
-  #loginScreen h2{font-family:'Space Grotesk',sans-serif;font-size:24px;margin:18px 0 6px;}
+  #loginScreen h2{font-family:'Raleway',sans-serif;font-size:24px;margin:18px 0 6px;}
   #loginScreen p{color:var(--ink-soft);font-size:14px;margin:0 0 24px;}
   #loginForm{display:flex;flex-direction:column;gap:12px;width:100%;max-width:320px;}
   #loginForm input{
-    font-family:'Inter',sans-serif;font-size:14px;color:var(--ink);
+    font-family:'Raleway',sans-serif;font-size:14px;color:var(--ink);
     background:var(--surface);border:1px solid var(--line);border-radius:9px;
     padding:11px 14px;
   }
@@ -425,7 +433,7 @@
     <div class="brand">
       <div class="mark"></div>
       <div>
-        <h1>Gus Foods — Ops Dashboard</h1>
+        <h1>Ops Dashboard</h1>
         <p>Sales · Scrap · Stock Adjustments — weekly or monthly, total or per fridge</p>
       </div>
     </div>
@@ -1235,7 +1243,7 @@
     const search = document.createElement('input');
     search.type = 'text';
     search.placeholder = 'Filter…';
-    search.style.cssText = 'width:100%;margin:2px 0 6px;padding:5px 8px;font-size:12px;border:1px solid var(--line);border-radius:6px;font-family:Inter,sans-serif;';
+    search.style.cssText = 'width:100%;margin:2px 0 6px;padding:5px 8px;font-size:12px;border:1px solid var(--line);border-radius:6px;font-family:Raleway,sans-serif;';
     search.addEventListener('input', () => {
       const q = search.value.toLowerCase();
       panel.querySelectorAll('.period-picker-option').forEach(o => {
@@ -1342,7 +1350,7 @@
     const search = document.createElement('input');
     search.type = 'text';
     search.placeholder = 'Filter\u2026';
-    search.style.cssText = 'width:100%;margin:2px 0 6px;padding:5px 8px;font-size:12px;border:1px solid var(--line);border-radius:6px;font-family:Inter,sans-serif;';
+    search.style.cssText = 'width:100%;margin:2px 0 6px;padding:5px 8px;font-size:12px;border:1px solid var(--line);border-radius:6px;font-family:Raleway,sans-serif;';
     search.addEventListener('input', () => {
       const q = search.value.toLowerCase();
       panel.querySelectorAll('.period-picker-option').forEach(o => {
@@ -2305,7 +2313,7 @@
           points.forEach((p,i) => {
             const labelText = opts.tooltipFormat ? opts.tooltipFormat(ds.data[i]) : String(ds.data[i]);
             const ty = Math.max(p[1]-8, paddingTop+9);
-            const t = svgEl('text', { x:p[0].toFixed(1), y:ty.toFixed(1), 'text-anchor':'middle', 'font-size':9.5, 'font-family':'IBM Plex Mono, monospace', fill:'#152227' });
+            const t = svgEl('text', { x:p[0].toFixed(1), y:ty.toFixed(1), 'text-anchor':'middle', 'font-size':9.5, 'font-family':'IBM Plex Mono, monospace', fill:'#004C45' });
             t.textContent = labelText;
             svg.appendChild(t);
           });
@@ -2329,7 +2337,7 @@
           if(showValueLabels && barWidth >= 16){
             const labelText = opts.tooltipFormat ? opts.tooltipFormat(v) : String(v);
             const ty = v >= 0 ? Math.max(yTop-5, paddingTop+9) : (yBase + barH + 11);
-            const t = svgEl('text', { x:(x+barWidth/2).toFixed(1), y:ty.toFixed(1), 'text-anchor':'middle', 'font-size':9.5, 'font-family':'IBM Plex Mono, monospace', fill:'#152227' });
+            const t = svgEl('text', { x:(x+barWidth/2).toFixed(1), y:ty.toFixed(1), 'text-anchor':'middle', 'font-size':9.5, 'font-family':'IBM Plex Mono, monospace', fill:'#004C45' });
             t.textContent = labelText;
             svg.appendChild(t);
           }
@@ -2375,7 +2383,7 @@
       let lx = paddingLeft;
       datasets.forEach(ds => {
         svg.appendChild(svgEl('rect', { x:lx, y:2, width:9, height:9, rx:2, fill: ds.color }));
-        const t = svgEl('text', { x:lx+13, y:11, 'font-size':10, 'font-family':'Inter, sans-serif', fill:'#5B6B72' });
+        const t = svgEl('text', { x:lx+13, y:11, 'font-size':10, 'font-family':'Raleway, sans-serif', fill:'#5B6B72' });
         t.textContent = ds.label;
         svg.appendChild(t);
         lx += 13 + (ds.label.length*5.5) + 16;
@@ -2440,7 +2448,7 @@
     items.forEach((it,i) => {
       const y = paddingTop + i*rowH;
       const barW = innerW * (it.value/maxV);
-      const rect = svgEl('rect', { x:paddingLeft, y:y+3, width:Math.max(barW,1).toFixed(1), height:rowH-8, rx:3, fill: opts.color || '#0E7C86' });
+      const rect = svgEl('rect', { x:paddingLeft, y:y+3, width:Math.max(barW,1).toFixed(1), height:rowH-8, rx:3, fill: opts.color || '#004C45' });
       svg.appendChild(rect);
       rect.style.transformBox = 'fill-box';
       rect.style.transformOrigin = '0% 50%';
@@ -2453,7 +2461,7 @@
       strip.addEventListener('mouseleave', () => { rect.style.transform = ''; hideTip(tip); });
       svg.appendChild(strip);
 
-      const label = svgEl('text', { x:paddingLeft-8, y:y+rowH/2+4, 'text-anchor':'end', 'font-size':11, 'font-family':'Inter, sans-serif', fill:'#152227', 'pointer-events':'none' });
+      const label = svgEl('text', { x:paddingLeft-8, y:y+rowH/2+4, 'text-anchor':'end', 'font-size':11, 'font-family':'Raleway, sans-serif', fill:'#004C45', 'pointer-events':'none' });
       label.textContent = it.label.length > 24 ? it.label.slice(0,22)+'…' : it.label;
       svg.appendChild(label);
 
@@ -2696,7 +2704,7 @@
   let assortRange = { start: new Date(new Date().getFullYear(), new Date().getMonth(), 1), end: startOfDay(new Date()) };
   let assortFridges = new Set();
   let assortCats = null; // null = all categories
-  const STACK_COLORS = ['#0E7C86','#E2823D','#2E9E6E','#D6553F','#3E7CB1','#8A62A8','#C4A035','#6B8E23','#A0527E','#B5651D','#4AA8A0','#7C8A8F'];
+  const STACK_COLORS = ['#004C45','#FD6C70','#4290FF','#57A773','#D9B514','#8A62A8','#B5651D','#4AA8A0','#A0527E','#6B8E23','#9FC0F9','#7C8A8F'];
   const OTHER_COLOR = '#C9D2D4';
   const isoDate = d => d.getFullYear() + '-' + pad2(d.getMonth()+1) + '-' + pad2(d.getDate());
 
