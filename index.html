@@ -2266,6 +2266,9 @@
     if(opts.stacked){
       // Stacked bars: datasets pile upward per label. Negative segments are clamped to 0.
       // Each segment carries its OWN tooltip (value + share of the bar) and elevates on hover.
+      // Largest series sits closest to the axis, then descending.
+      datasets = [...datasets].sort((a,b) =>
+        b.data.reduce((x,v)=>x+Math.max(v||0,0),0) - a.data.reduce((x,v)=>x+Math.max(v||0,0),0));
       const barWidth = Math.max(2, slotW*0.68);
       const cumTops = labels.map(() => zeroY);
       const totals = labels.map((_,i) => datasets.reduce((a,d)=>a+Math.max(d.data[i]||0,0),0));
@@ -2854,17 +2857,22 @@
         return periodLabelFromKey(k, assortGran);
       });
       const seriesFor = (field, palette) => {
-        const ds = topGroups.map((g,gi) => ({
-          label: g, color: palette[gi % palette.length],
+        const ds = topGroups.map(g => ({
+          label: g,
           data: keys.map(k => (groups.get(g) && groups.get(g).get(k)) ? Math.max(groups.get(g).get(k)[field],0) : 0)
         }));
         if(hasOther){
-          ds.push({ label:'Other', color: OTHER_COLOR,
+          ds.push({ label:'Other', other:true,
             data: keys.map(k => ranked.slice(9).reduce((a,g) => {
               const c = groups.get(g) && groups.get(g).get(k);
               return a + (c ? Math.max(c[field],0) : 0);
             }, 0)) });
         }
+        // Sort by this chart's own totals (largest first = closest to the axis) and
+        // assign the dark->light ladder in that order; "Other" keeps its grey.
+        ds.sort((a,b) => b.data.reduce((x,v)=>x+v,0) - a.data.reduce((x,v)=>x+v,0));
+        let ci = 0;
+        ds.forEach(d => { d.color = d.other ? OTHER_COLOR : palette[ci++ % palette.length]; });
         return ds;
       };
       // Legends only list categories that actually have a non-zero value in that chart.
