@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Gus Foods — Ops Dashboard</title>
+<title>Gus Foods — The Cockpit</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -49,8 +49,9 @@
     display:flex;align-items:center;justify-content:space-between;
     margin-bottom:28px;flex-wrap:wrap;gap:16px;
     background:var(--coral);border-radius:var(--radius);
-    padding:16px 22px;color:#fff;
+    padding:10px 22px;color:#fff;
   }
+  header.top .file-status{flex-wrap:wrap;justify-content:flex-end;}
   .brand{display:flex;align-items:center;gap:16px;}
   .brand .mark{
     width:58px;height:46px;flex-shrink:0;
@@ -433,8 +434,7 @@
     <div class="brand">
       <div class="mark"></div>
       <div>
-        <h1>Ops Dashboard</h1>
-        <p>Sales · Scrap · Stock Adjustments — weekly or monthly, total or per fridge</p>
+        <h1>The Cockpit</h1>
       </div>
     </div>
     <div class="file-status">
