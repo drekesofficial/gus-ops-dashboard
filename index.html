@@ -1899,8 +1899,13 @@
     compareRange = deriveCompareRange();
     compareLabelText = compareRange ? 'vs ' + fmtRange(compareRange) : '';
 
-    if(gran === 'day'){
-      let from = dayKey(mainRange.start), to = dayKey(mainRange.end);
+    // Day-grain data backs the KPI tiles at any granularity (exact date range), and
+    // the charts when Day granularity is selected.
+    if(DATA_SOURCE === 'supabase'){
+      // include the preceding equal-length window: "fridges to watch" compares against
+      // it when no explicit comparison is selected
+      const precedStart = addDays(mainRange.start, -(daysBetween(mainRange.start, mainRange.end) + 1));
+      let from = dayKey(precedStart), to = dayKey(mainRange.end);
       if(compareRange){ from = Math.min(from, dayKey(compareRange.start)); to = Math.max(to, dayKey(compareRange.end)); }
       try{ await ensureDayData(from, to); }
       catch(err){ console.error(err); }
@@ -1908,8 +1913,17 @@
     }
     const store = gran === 'day' ? DAY.store : AGG[gran];
 
+    // KPI scope: exact days of the picked range (charts may bucket wider, e.g. a
+    // 1-day range at Week granularity shows the whole week in the chart only).
+    const useDayKpis = DATA_SOURCE === 'supabase';
+    const kpiStore = useDayKpis ? DAY.store : store;
+    const kpiScope = useDayKpis ? rangeToKeys(mainRange, 'day') : null; // resolved below
+    const kpiPrev = useDayKpis && compareRange ? rangeToKeys(compareRange, 'day') : null;
+
     const scopePeriods = rangeToKeys(mainRange, gran);
     const prevPeriods = compareRange ? rangeToKeys(compareRange, gran) : [];
+    const kpiKeys = kpiScope || scopePeriods;
+    const kpiPrevKeys = useDayKpis ? (kpiPrev || []) : prevPeriods;
     const scopeText = fmtRange(mainRange);
     document.getElementById('rangeLabel').textContent =
       scopeText + (compareRange ? '  vs  ' + fmtRange(compareRange) : '');
@@ -1970,13 +1984,13 @@
     // ---- KPI tiles: every representation stacked (€ / units / % of sales) ----
     // "cur"/"prevTotals" are €-based (falls back to units when no cost data) and feed
     // the deltas, sparklines and insight banner.
-    const cur = computeKpiTotals(scopePeriods, store, selectedWh, 'eur', hasCost, percentBasis);
-    const prevTotals = prevPeriods.length ? computeKpiTotals(prevPeriods, store, selectedWh, 'eur', hasCost, percentBasis) : null;
+    const cur = computeKpiTotals(kpiKeys, kpiStore, selectedWh, 'eur', hasCost, percentBasis);
+    const prevTotals = kpiPrevKeys.length ? computeKpiTotals(kpiPrevKeys, kpiStore, selectedWh, 'eur', hasCost, percentBasis) : null;
     const fmt = hasCost ? fmtEUR : (n => fmtNum(n) + ' u.');
     const unitsTxt = n => fmtNum(n) + ' u.';
 
     // Selection's share of the grand total (all fridges, incl. unchecked) in brackets.
-    const grand = f => sumField(scopePeriods, store, '__ALL__', f);
+    const grand = f => sumField(kpiKeys, kpiStore, '__ALL__', f);
     const shareTxt = (v, total) => total > 0 ? ' (' + (v/total*100).toFixed(1) + '%)' : '';
 
     // Total sales
@@ -1985,8 +1999,8 @@
 
     // Scrap: each line as % of the matching sales figure - € vs sales €, units vs units sold.
     const pctOf = (v, total, what) => total > 0 ? ' (' + (v/total*100).toFixed(1) + '% of ' + what + ')' : '';
-    const scrapU = sumField(scopePeriods, store, selectedWh, 'scrap');
-    const scrapV = sumField(scopePeriods, store, selectedWh, 'scrapValue');
+    const scrapU = sumField(kpiKeys, kpiStore, selectedWh, 'scrap');
+    const scrapV = sumField(kpiKeys, kpiStore, selectedWh, 'scrapValue');
     document.getElementById('kpiScrap').textContent = hasCost
       ? fmtEUR(scrapV) + pctOf(scrapV, cur.totRevenue, 'sales')
       : unitsTxt(scrapU) + pctOf(scrapU, cur.totUnits, 'units sold');
@@ -1995,10 +2009,10 @@
     document.getElementById('kpiScrapSub').textContent = 'valued at product cost';
 
     // Stock adjustments (net): same treatment.
-    const adjPosU = sumField(scopePeriods, store, selectedWh, 'adjPos');
-    const adjNegU = sumField(scopePeriods, store, selectedWh, 'adjNeg');
-    const adjPosV = sumField(scopePeriods, store, selectedWh, 'adjPosValue');
-    const adjNegV = sumField(scopePeriods, store, selectedWh, 'adjNegValue');
+    const adjPosU = sumField(kpiKeys, kpiStore, selectedWh, 'adjPos');
+    const adjNegU = sumField(kpiKeys, kpiStore, selectedWh, 'adjNeg');
+    const adjPosV = sumField(kpiKeys, kpiStore, selectedWh, 'adjPosValue');
+    const adjNegV = sumField(kpiKeys, kpiStore, selectedWh, 'adjNegValue');
     const netU = adjPosU - adjNegU;
     const netV = adjPosV - adjNegV;
     const netMain = hasCost ? netV : netU;
@@ -2026,12 +2040,12 @@
     // "goods received" and "scrap"/"adjustment" for the same unit would deduct its cost twice.
     // Always scoped to the same current-period selection as the KPI row above.
     if(hasCost){
-      const totCogs = sumField(scopePeriods, store, selectedWh, 'cogsValue');
-      const totScrapValueAbs = sumField(scopePeriods, store, selectedWh, 'scrapValue');
-      const totAdjPosValueAbs = sumField(scopePeriods, store, selectedWh, 'adjPosValue');
-      const totAdjNegValueAbs = sumField(scopePeriods, store, selectedWh, 'adjNegValue');
+      const totCogs = sumField(kpiKeys, kpiStore, selectedWh, 'cogsValue');
+      const totScrapValueAbs = sumField(kpiKeys, kpiStore, selectedWh, 'scrapValue');
+      const totAdjPosValueAbs = sumField(kpiKeys, kpiStore, selectedWh, 'adjPosValue');
+      const totAdjNegValueAbs = sumField(kpiKeys, kpiStore, selectedWh, 'adjNegValue');
       const netAdjLoss = totAdjNegValueAbs - totAdjPosValueAbs; // positive = net loss, negative = net gain (found stock)
-      const marginRevenueTotal = sumField(scopePeriods, store, selectedWh, 'revenue');
+      const marginRevenueTotal = sumField(kpiKeys, kpiStore, selectedWh, 'revenue');
       const margin = marginRevenueTotal - totCogs - totScrapValueAbs - netAdjLoss;
 
       document.getElementById('marginRevenue').textContent = fmtEUR(marginRevenueTotal);
@@ -2077,7 +2091,7 @@
 
     document.getElementById('topScope').textContent = '(' + scopeText + ')';
     document.getElementById('bottomScope').textContent = '(' + scopeText + ')';
-    drawTopWarehouses(scopePeriods, store);
+    drawTopWarehouses(kpiKeys, kpiStore);
 
     // ---- Needs attention: latest complete week/month vs its own recent history —
     // independent of the picked range; hidden at day grain (too noisy per day) ----
@@ -2095,15 +2109,15 @@
 
     // ---- Fridges to watch: selected range vs the comparison range (or, with comparison
     // off, the equal-length window immediately before the range) ----
-    let moverPrev = prevPeriods;
+    let moverPrev = kpiPrevKeys;
     if(!moverPrev.length){
       const len = daysBetween(mainRange.start, mainRange.end);
       const end = addDays(mainRange.start, -1);
-      moverPrev = rangeToKeys({ start: addDays(end, -len), end }, gran);
+      moverPrev = rangeToKeys({ start: addDays(end, -len), end }, useDayKpis ? 'day' : gran);
     }
     document.getElementById('moversScope').textContent =
       '(' + scopeText + ' vs ' + (compareRange ? fmtRange(compareRange) : 'preceding window') + ')';
-    const movers = computeMovers(scopePeriods, moverPrev, store, hasCost);
+    const movers = computeMovers(kpiKeys, moverPrev, kpiStore, hasCost);
     renderMoversList('moversRevenue', movers.revenue, fmtEUR, true);
     renderMoversList('moversScrap', movers.scrap, hasCost ? fmtEUR : (n => fmtNum(n) + ' u.'), false);
     renderMoversList('moversAdj', movers.adj, hasCost ? fmtEUR : (n => fmtNum(n) + ' u.'), false);
