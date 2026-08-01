@@ -131,6 +131,10 @@
     padding:8px 12px;cursor:pointer;min-width:200px;
   }
   .spacer{flex:1;}
+  .controls.sticky{
+    position:sticky;top:0;z-index:20;background:var(--bg);
+    padding:10px 0 12px;margin-bottom:12px;
+  }
 
   .kpi-row{
     display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
@@ -482,7 +486,7 @@
     </div>
 
     <div id="opsView">
-    <div class="controls">
+    <div class="controls sticky">
       <div class="seg" id="granSeg">
         <button data-gran="day">Day</button>
         <button data-gran="week" class="active">Week</button>
@@ -535,18 +539,6 @@
       <div id="anomalyList"></div>
     </div>
 
-    <div class="chart-card full margin-card">
-      <h3>Margin breakdown <span id="marginScope" style="font-weight:400;color:var(--ink-soft);"></span></h3>
-      <div class="margin-rows">
-        <div class="margin-row"><span>Revenue</span><span id="marginRevenue">—</span></div>
-        <div class="margin-row"><span>− Cost of goods sold (COGS)</span><span id="marginReceipts">—</span></div>
-        <div class="margin-row"><span>− Scrap</span><span id="marginScrap">—</span></div>
-        <div class="margin-row"><span>− Stock adjustments (net loss)</span><span id="marginAdj">—</span></div>
-        <div class="margin-row total-row"><span>= Net margin</span><span id="marginTotal">—</span></div>
-      </div>
-      <div class="margin-note" id="marginNote"></div>
-    </div>
-
     <div class="chart-grid">
       <div class="chart-card full">
         <div class="card-head">
@@ -557,14 +549,14 @@
       <div class="chart-card">
         <div class="card-head">
           <h3>Scrap as % of sales</h3>
-          <label class="threshold-input">Target <input type="number" id="scrapTarget" step="0.5" min="0" value="5" />%</label>
+          <label class="threshold-input">Target <input type="number" id="scrapTarget" step="0.5" min="0" value="15" />%</label>
         </div>
         <div class="wrap"><div id="chartScrap" class="chart-svg"></div></div>
       </div>
       <div class="chart-card">
         <div class="card-head">
           <h3>Stock adjustments (net) as % of sales</h3>
-          <label class="threshold-input">Target <input type="number" id="adjTarget" step="0.5" value="-2" />%</label>
+          <label class="threshold-input">Target <input type="number" id="adjTarget" step="0.5" value="-5" />%</label>
         </div>
         <div class="wrap"><div id="chartAdj" class="chart-svg"></div></div>
       </div>
@@ -602,11 +594,23 @@
       </div>
     </div>
 
+    <div class="chart-card full margin-card">
+      <h3>Margin breakdown <span id="marginScope" style="font-weight:400;color:var(--ink-soft);"></span></h3>
+      <div class="margin-rows">
+        <div class="margin-row"><span>Revenue</span><span id="marginRevenue">—</span></div>
+        <div class="margin-row"><span>− Cost of goods sold (COGS)</span><span id="marginReceipts">—</span></div>
+        <div class="margin-row"><span>− Scrap</span><span id="marginScrap">—</span></div>
+        <div class="margin-row"><span>− Stock adjustments (net loss)</span><span id="marginAdj">—</span></div>
+        <div class="margin-row total-row"><span>= Net margin</span><span id="marginTotal">—</span></div>
+      </div>
+      <div class="margin-note" id="marginNote"></div>
+    </div>
+
     <footer class="note">Scrap and stock adjustment trend charts always show % of sales. "Fridges to watch" always compares scrap in € (cost) when product cost data is available. The Units/€/% toggle above only affects the KPI cards.</footer>
     </div><!-- /opsView -->
 
     <div id="custView" style="display:none;">
-      <div class="controls">
+      <div class="controls sticky">
         <div class="seg" id="custGranSeg">
           <button data-gran="week" class="active">Week</button>
           <button data-gran="month">Month</button>
@@ -677,7 +681,7 @@
     </div><!-- /custView -->
 
     <div id="assortView" style="display:none;">
-      <div class="controls">
+      <div class="controls sticky">
         <div class="seg" id="assortGranSeg">
           <button data-gran="day">Day</button>
           <button data-gran="week" class="active">Week</button>
@@ -1479,7 +1483,12 @@
     return r.start.toLocaleDateString('en-GB', oy) + ' – ' + r.end.toLocaleDateString('en-GB', oy);
   }
 
-  let mainRange = { start: new Date(new Date().getFullYear(), new Date().getMonth(), 1), end: startOfDay(new Date()) };
+  function thisWeekRange(){
+    const t = startOfDay(new Date());
+    const mon = addDays(t, -((t.getDay()+6)%7));
+    return { start: mon, end: t };
+  }
+  let mainRange = thisWeekRange();
   let compareRange = null; // set by deriveCompareRange()
 
   // Distinct period keys (current granularity) covered by a date range, in order.
@@ -1832,16 +1841,16 @@
     [...selectedFridges].forEach(wh => {
       const curRev = sumField(scopePeriods, store, wh, 'revenue');
       const prevRev = sumField(prevPeriods, store, wh, 'revenue');
-      if(curRev || prevRev) revItems.push({ wh, delta: curRev-prevRev });
+      if(curRev || prevRev) revItems.push({ wh, delta: curRev-prevRev, prev: prevRev });
 
       const curScrap = sumField(scopePeriods, store, wh, scrapField);
       const prevScrap = sumField(prevPeriods, store, wh, scrapField);
-      if(curScrap || prevScrap) scrapItems.push({ wh, delta: curScrap-prevScrap });
+      if(curScrap || prevScrap) scrapItems.push({ wh, delta: curScrap-prevScrap, prev: prevScrap });
 
       // Net stock loss = negative adjustments minus positive ones; delta > 0 = losing more.
       const curLoss = sumField(scopePeriods, store, wh, adjNegField) - sumField(scopePeriods, store, wh, adjPosField);
       const prevLoss = sumField(prevPeriods, store, wh, adjNegField) - sumField(prevPeriods, store, wh, adjPosField);
-      if(curLoss || prevLoss) adjItems.push({ wh, delta: curLoss-prevLoss });
+      if(curLoss || prevLoss) adjItems.push({ wh, delta: curLoss-prevLoss, prev: prevLoss });
     });
     revItems.sort((a,b)=>Math.abs(b.delta)-Math.abs(a.delta));
     scrapItems.sort((a,b)=>Math.abs(b.delta)-Math.abs(a.delta));
@@ -1870,7 +1879,9 @@
       const isGood = it.delta === 0 ? null : (goodIfUp ? it.delta >= 0 : it.delta <= 0);
       delta.className = 'm-delta' + (isGood===null ? '' : (isGood ? ' pos' : ' neg'));
       const arrow = it.delta > 0 ? '▲' : (it.delta < 0 ? '▼' : '▬');
-      delta.textContent = arrow + ' ' + (it.delta>=0?'+':'') + fmtFn(it.delta);
+      const pct = it.prev ? (it.delta / Math.abs(it.prev) * 100) : null;
+      delta.textContent = arrow + ' ' + (it.delta>=0?'+':'') + fmtFn(it.delta) +
+        (pct === null ? '' : ' (' + (pct>=0?'+':'') + pct.toFixed(1) + '%)');
       row.appendChild(name);
       row.appendChild(delta);
       container.appendChild(row);
@@ -2223,13 +2234,21 @@
     let minV = Math.min(0, ...allValues);
     let maxV = Math.max(0, ...allValues, 1e-9);
     if(minV === maxV) maxV = minV + 1;
+    // Round the axis to "nice" intervals (1 / 2 / 2.5 / 5 x 10^k): a max in the
+    // thousands snaps to hundreds, a max in the hundreds snaps to tens, etc.
+    const rawStep = (maxV - minV) / 4;
+    const stepMag = Math.pow(10, Math.floor(Math.log10(rawStep)));
+    const stepNorm = rawStep / stepMag;
+    const tickStep = (stepNorm <= 1 ? 1 : stepNorm <= 2 ? 2 : stepNorm <= 2.5 ? 2.5 : stepNorm <= 5 ? 5 : 10) * stepMag;
+    minV = Math.floor(minV / tickStep) * tickStep;
+    maxV = Math.ceil(maxV / tickStep) * tickStep;
     const range = maxV - minV;
 
     const svg = svgEl('svg', { viewBox: `0 0 ${width} ${height}`, preserveAspectRatio:'none' });
 
-    const ticks = 4;
+    const ticks = Math.max(1, Math.round(range / tickStep));
     for(let i=0;i<=ticks;i++){
-      const v = minV + range*i/ticks;
+      const v = minV + tickStep*i;
       const y = paddingTop + innerH*(1 - (v-minV)/range);
       svg.appendChild(svgEl('line', { x1:paddingLeft, x2:width-paddingRight, y1:y, y2:y, stroke:'#EEF2F3', 'stroke-width':1 }));
       const text = svgEl('text', { x:paddingLeft-8, y:y+3, 'text-anchor':'end', 'font-size':9.5, 'font-family':'IBM Plex Mono, monospace', fill:'#5B6B72' });
@@ -2269,6 +2288,16 @@
           cumTops[i] = y;
         });
       });
+      if(opts.legend){
+        let lx = paddingLeft;
+        datasets.filter(ds => ds.data.some(v => v > 0)).forEach(ds => {
+          svg.appendChild(svgEl('rect', { x:lx, y:2, width:9, height:9, rx:2, fill: ds.color }));
+          const t = svgEl('text', { x:lx+13, y:11, 'font-size':10, 'font-family':'Raleway, sans-serif', fill:'#5B6B72' });
+          t.textContent = ds.label;
+          svg.appendChild(t);
+          lx += 13 + (ds.label.length*5.5) + 16;
+        });
+      }
       // x labels
       const minGapS = 46;
       let lastXs = -Infinity;
@@ -2276,7 +2305,7 @@
         const x = paddingLeft + slotW*(i+0.5);
         if(x - lastXs < minGapS) return;
         lastXs = x;
-        const text = svgEl('text', { x, y:height-8, 'text-anchor':'middle', 'font-size':9, 'font-family':'IBM Plex Mono, monospace', fill:'#5B6B72' });
+        const text = svgEl('text', { x, y:height-8, 'text-anchor':'middle', 'font-size':9, 'font-weight':700, 'font-family':'IBM Plex Mono, monospace', fill:'#5B6B72' });
         text.textContent = lab;
         svg.appendChild(text);
       });
@@ -2337,7 +2366,8 @@
           if(showValueLabels && barWidth >= 16){
             const labelText = opts.tooltipFormat ? opts.tooltipFormat(v) : String(v);
             const ty = v >= 0 ? Math.max(yTop-5, paddingTop+9) : (yBase + barH + 11);
-            const t = svgEl('text', { x:(x+barWidth/2).toFixed(1), y:ty.toFixed(1), 'text-anchor':'middle', 'font-size':9.5, 'font-family':'IBM Plex Mono, monospace', fill:'#004C45' });
+            const insideBar = v >= 0 && ty > yTop; // clamped downward into the bar
+            const t = svgEl('text', { x:(x+barWidth/2).toFixed(1), y:ty.toFixed(1), 'text-anchor':'middle', 'font-size':9.5, 'font-family':'IBM Plex Mono, monospace', fill: insideBar ? '#FFFFFF' : '#004C45' });
             t.textContent = labelText;
             svg.appendChild(t);
           }
@@ -2373,7 +2403,7 @@
         shown.push(lastIdx);
       }
       shown.forEach(i => {
-        const text = svgEl('text', { x:positions[i], y:height-8, 'text-anchor':'middle', 'font-size':9, 'font-family':'IBM Plex Mono, monospace', fill:'#5B6B72' });
+        const text = svgEl('text', { x:positions[i], y:height-8, 'text-anchor':'middle', 'font-size':9, 'font-weight':700, 'font-family':'IBM Plex Mono, monospace', fill:'#5B6B72' });
         text.textContent = labels[i];
         svg.appendChild(text);
       });
@@ -2381,7 +2411,7 @@
 
     if(opts.legend){
       let lx = paddingLeft;
-      datasets.forEach(ds => {
+      datasets.filter(ds => ds.data.some(v => v)).forEach(ds => {
         svg.appendChild(svgEl('rect', { x:lx, y:2, width:9, height:9, rx:2, fill: ds.color }));
         const t = svgEl('text', { x:lx+13, y:11, 'font-size':10, 'font-family':'Raleway, sans-serif', fill:'#5B6B72' });
         t.textContent = ds.label;
@@ -2524,7 +2554,7 @@
     document.querySelectorAll('#custGranSeg button').forEach(b=>b.classList.toggle('active', b===btn));
     custRefresh();
   });
-  let custRange = { start: addDays(startOfDay(new Date()), -90), end: startOfDay(new Date()) };
+  let custRange = thisWeekRange();
   createRangePicker('custRangePicker', () => custRange, r => { custRange = r; custRefresh(); }, MAIN_PRESETS);
 
   let custSelectedFridges = new Set();
@@ -2557,7 +2587,10 @@
 
       // Periods covered by the picked date range (trend charts).
       const rangeKeys = rangeToKeys(custRange, custGran).filter(p => byP.has(p));
-      const complete = rangeKeys.filter(p => isPeriodComplete(p, custGran));
+      let complete = rangeKeys.filter(p => isPeriodComplete(p, custGran));
+      // Short ranges (e.g. the default "This week") may hold no complete period yet —
+      // show the in-progress period rather than empty charts.
+      if(!complete.length) complete = rangeKeys;
       const labels = complete.map(p => periodLabelFromKey(p, custGran));
       const rows = complete.map(p => byP.get(p));
       const rpb = r => r && r.buyers ? r.revenue/r.buyers : 0;
@@ -2589,10 +2622,10 @@
       drawLineBar('chartBuyers', labels, [
         { label:'New', data: rows.map(r=>r.new_buyers), color: getVar('--amber') },
         { label:'Returning', data: rows.map(r=>r.buyers - r.new_buyers), color: getVar('--teal') }
-      ], { grouped:true, legend:true, valueLabels:false, yFormat: v=>fmtNum(v), tooltipFormat: v=>fmtNum(v) });
+      ], { stacked:true, legend:true, yFormat: v=>fmtNum(v), tooltipFormat: v=>fmtNum(v) });
       drawLineBar('chartRevPerBuyer', labels,
-        [{ label:'€/customer', data: rows.map(rpb), color: getVar('--teal-dark') }],
-        { yFormat: v=>fmtEUR(v), tooltipFormat: v=>fmtEUR(v) });
+        [{ label:'€/customer', data: rows.map(rpb), color: getVar('--kale') }],
+        { yFormat: v=>fmtEUR(v), tooltipFormat: v=>fmtEUR2(v) });
       drawLineBar('chartOrdersPerBuyer', labels,
         [{ label:'orders/customer', data: rows.map(r=>r.buyers?r.orders/r.buyers:0), color: getVar('--green') }],
         { yFormat: v=>v.toFixed(1), tooltipFormat: v=>v.toFixed(2) });
@@ -2701,11 +2734,14 @@
 
   // ---------- Assortment tab ----------
   let assortStarted = false, assortGran = 'week', assortMode = 'eur';
-  let assortRange = { start: new Date(new Date().getFullYear(), new Date().getMonth(), 1), end: startOfDay(new Date()) };
+  let assortRange = thisWeekRange();
   let assortFridges = new Set();
   let assortCats = null; // null = all categories
-  const STACK_COLORS = ['#004C45','#FD6C70','#4290FF','#57A773','#D9B514','#8A62A8','#B5651D','#4AA8A0','#A0527E','#6B8E23','#9FC0F9','#7C8A8F'];
-  const OTHER_COLOR = '#C9D2D4';
+  // One brand color per chart, dark -> light ladder (9 steps), per the brandbook hues.
+  const PAL_KALE  = ['#00332E','#004C45','#1E6156','#397668','#548B7A','#70A18D','#8CB7A1','#A9CDB7','#C6E3CE'];
+  const PAL_CORAL = ['#7E2F33','#A44146','#C9535A','#FD6C70','#FE8689','#FEA0A2','#FFBABC','#FFD3D4','#FFE8E8'];
+  const PAL_BLUE  = ['#123C7A','#1D549E','#2C6DC3','#4290FF','#67A7FF','#8BBDFF','#AACDFB','#C6DDFC','#E0ECFE'];
+  const OTHER_COLOR = '#CFC9BB';
   const isoDate = d => d.getFullYear() + '-' + pad2(d.getMonth()+1) + '-' + pad2(d.getDate());
 
   function assortInit(){
@@ -2801,7 +2837,6 @@
       const ranked = [...groupTotals.entries()].sort((a,b)=>b[1]-a[1]).map(([g])=>g);
       const topGroups = ranked.slice(0, 9);
       const hasOther = ranked.length > topGroups.length;
-      const colorOf = g => topGroups.includes(g) ? STACK_COLORS[topGroups.indexOf(g) % STACK_COLORS.length] : OTHER_COLOR;
 
       const labels = keys.map(k => {
         if(assortGran === 'day'){
@@ -2810,9 +2845,9 @@
         }
         return periodLabelFromKey(k, assortGran);
       });
-      const seriesFor = field => {
-        const ds = topGroups.map(g => ({
-          label: g, color: colorOf(g),
+      const seriesFor = (field, palette) => {
+        const ds = topGroups.map((g,gi) => ({
+          label: g, color: palette[gi % palette.length],
           data: keys.map(k => (groups.get(g) && groups.get(g).get(k)) ? Math.max(groups.get(g).get(k)[field],0) : 0)
         }));
         if(hasOther){
@@ -2824,14 +2859,18 @@
         }
         return ds;
       };
-      const legendEntries = topGroups.map(g => [g, colorOf(g)]).concat(hasOther ? [['Other', OTHER_COLOR]] : []);
+      // Legends only list categories that actually have a non-zero value in that chart.
+      const legendFor = series => series.filter(d => d.data.some(v => v > 0)).map(d => [d.label, d.color]);
 
-      renderChart('chartAssortRev', labels, seriesFor('rev'), { stacked:true, yFormat: fmtVal, tooltipFormat: fmtVal });
-      renderChart('chartAssortScrap', labels, seriesFor('scrap'), { stacked:true, yFormat: fmtVal, tooltipFormat: fmtVal });
-      renderChart('chartAssortAdj', labels, seriesFor('loss'), { stacked:true, yFormat: fmtVal, tooltipFormat: fmtVal });
-      renderStackLegend('legendAssortRev', legendEntries);
-      renderStackLegend('legendAssortScrap', legendEntries);
-      renderStackLegend('legendAssortAdj', legendEntries);
+      const revSeries = seriesFor('rev', PAL_KALE);
+      const scrapSeries = seriesFor('scrap', PAL_CORAL);
+      const lossSeries = seriesFor('loss', PAL_BLUE);
+      renderChart('chartAssortRev', labels, revSeries, { stacked:true, yFormat: fmtVal, tooltipFormat: fmtVal });
+      renderChart('chartAssortScrap', labels, scrapSeries, { stacked:true, yFormat: fmtVal, tooltipFormat: fmtVal });
+      renderChart('chartAssortAdj', labels, lossSeries, { stacked:true, yFormat: fmtVal, tooltipFormat: fmtVal });
+      renderStackLegend('legendAssortRev', legendFor(revSeries));
+      renderStackLegend('legendAssortScrap', legendFor(scrapSeries));
+      renderStackLegend('legendAssortAdj', legendFor(lossSeries));
 
       renderAssortCatTable(rows);
       renderProdTables(prods.filter(p => inCatSel(p.product_category)));
