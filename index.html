@@ -751,7 +751,7 @@
     <div id="b2bView" style="display:none;">
       <div class="controls sticky">
         <div id="b2bRangePicker"></div>
-        <input type="text" id="b2bSearch" placeholder="Search customer…"
+        <input type="text" id="b2bSearch" placeholder="Search location…"
                style="font-family:Raleway,sans-serif;font-size:13px;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 12px;min-width:220px;" />
         <div class="spacer"></div>
         <span class="file-status" id="b2bRangeLabel"></span>
@@ -781,8 +781,8 @@
       </div>
 
       <div class="chart-card full" style="margin-bottom:22px;">
-        <h3>Revenue per B2B customer <span id="b2bScope" style="font-weight:400;color:var(--ink-soft);"></span></h3>
-        <p style="font-size:12.5px;color:var(--ink-soft);margin:0 0 10px;">Click a customer to see its monthly revenue mix. Click a column header to sort.</p>
+        <h3>Revenue per location <span id="b2bScope" style="font-weight:400;color:var(--ink-soft);"></span></h3>
+        <p style="font-size:12.5px;color:var(--ink-soft);margin:0 0 10px;">One row per fridge/delivery location. Click a location for its monthly revenue mix; click a column header to sort.</p>
         <div class="table-scroll" style="max-height:520px;"><table class="data" id="b2bTable"></table></div>
       </div>
 
@@ -796,7 +796,7 @@
         <div class="margin-note" id="b2bDetailFridges"></div>
       </div>
 
-      <footer class="note">Fridge sales come from fridge orders (attributed to the company hosting the fridge). Subscription fees and room service come from posted invoices on the FEES and ROOM journals; credit notes are deducted. Amounts are untaxed. Months are bucketed by invoice date.</footer>
+      <footer class="note">One row per fridge/delivery location. Fridge sales come from fridge orders at that site; subscription fees and room service come from posted FEES/ROOM invoices, attributed to the location via the invoice's delivery address (correctable in the location_map table). Credit notes are deducted; amounts are untaxed; months follow the invoice date.</footer>
     </div><!-- /b2bView -->
   </div>
 
@@ -3040,8 +3040,7 @@
       if(seq !== b2bSeq) return;
       b2bMeta = meta;
       b2bRows = rows.map(r => ({
-        partner_id: r.partner_id,
-        customer_name: r.customer_name,
+        site: r.site,
         fridges: Number(r.fridges) || 0,
         fridge_revenue: Number(r.fridge_revenue) || 0,
         fees_revenue: Number(r.fees_revenue) || 0,
@@ -3070,7 +3069,7 @@
   }
 
   const B2B_COLS = [
-    ['customer_name','Customer'], ['fridges','Fridges'], ['fridge_revenue','Fridge sales'],
+    ['site','Location'], ['fridges','Fridges'], ['fridge_revenue','Fridge sales'],
     ['fees_revenue','Subscription fees'], ['room_revenue','Room service'],
     ['total_revenue','Total revenue'], ['share','% of total']
   ];
@@ -3080,12 +3079,13 @@
     clearNode(table);
     const q = document.getElementById('b2bSearch').value.trim().toLowerCase();
     const grand = b2bRows.reduce((a,r)=>a+r.total_revenue,0);
-    let rows = b2bRows.filter(r => !q || (r.customer_name||'').toLowerCase().includes(q));
+    let rows = b2bRows.filter(r => !q || (r.site||'').toLowerCase().includes(q));
     const col = b2bSort.col;
     rows.sort((a,b) => {
       const va = col === 'share' ? a.total_revenue : a[col];
       const vb = col === 'share' ? b.total_revenue : b[col];
       if(typeof va === 'string') return b2bSort.dir * va.localeCompare(vb);
+      // (site sorts alphabetically, numbers numerically)
       return b2bSort.dir * (va - vb);
     });
 
@@ -3094,10 +3094,10 @@
     B2B_COLS.forEach(([key, label]) => {
       const th = document.createElement('th');
       th.textContent = label + (b2bSort.col === key ? (b2bSort.dir < 0 ? ' ▾' : ' ▴') : '');
-      if(key !== 'customer_name') th.style.textAlign = 'right';
+      if(key !== 'site') th.style.textAlign = 'right';
       th.addEventListener('click', () => {
         if(b2bSort.col === key) b2bSort.dir *= -1;
-        else b2bSort = { col: key, dir: key === 'customer_name' ? 1 : -1 };
+        else b2bSort = { col: key, dir: key === 'site' ? 1 : -1 };
         renderB2bTable();
       });
       trh.appendChild(th);
@@ -3110,7 +3110,7 @@
       const tr = document.createElement('tr');
       tr.style.cursor = 'pointer';
       const cells = [
-        r.customer_name,
+        r.site,
         fmtNum(r.fridges),
         fmtEUR(r.fridge_revenue),
         fmtEUR(r.fees_revenue),
@@ -3134,11 +3134,11 @@
   async function b2bShowDetail(row){
     const card = document.getElementById('b2bDetailCard');
     card.style.display = '';
-    document.getElementById('b2bDetailTitle').textContent = row.customer_name + ' — monthly revenue mix';
+    document.getElementById('b2bDetailTitle').textContent = row.site + ' — monthly revenue mix';
     card.scrollIntoView({ behavior:'smooth', block:'nearest' });
     try{
       const pFrom = ymKey(b2bRange.start), pTo = ymKey(b2bRange.end);
-      const trend = await rpc('get_b2b_trend', { p_partner: row.partner_id, p_from: pFrom, p_to: pTo });
+      const trend = await rpc('get_b2b_trend', { p_site: row.site, p_from: pFrom, p_to: pTo });
       const byK = new Map(trend.map(t => [Number(t.period_key), t]));
       const keys = ymRangeKeys(b2bRange);
       const labels = keys.map(ymLabel);
@@ -3150,10 +3150,10 @@
       ];
       renderChart('chartB2bTrend', labels, series, { stacked:true, yFormat: v=>fmtEUR(v), tooltipFormat: v=>fmtEUR(v) });
       renderStackLegend('legendB2bTrend', series.filter(d => d.data.some(v=>v>0)).map(d => [d.label, d.color]));
-      const meta = (b2bMeta || []).find(m => m.partner_id === row.partner_id);
+      const meta = (b2bMeta || []).find(m => m.site === row.site);
       const fridges = meta && meta.fridges ? meta.fridges : [];
       document.getElementById('b2bDetailFridges').textContent =
-        fridges.length ? 'Fridges: ' + fridges.map(fridgeLabel).join(', ') : 'No fridge linked to this customer.';
+        fridges.length ? 'Fridges: ' + fridges.map(fridgeLabel).join(', ') : 'No fridge at this location (invoice-only revenue).';
     }catch(err){
       console.error(err);
       document.getElementById('b2bDetailFridges').textContent = 'Failed to load trend: ' + err.message;

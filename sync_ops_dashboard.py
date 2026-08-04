@@ -140,6 +140,20 @@ class Supabase:
         log(f'  {table}: upserted {total} rows')
         return total
 
+    def insert_ignore(self, table, rows, on_conflict):
+        """Insert rows, silently skipping ones whose key already exists (never overwrites)."""
+        if not rows:
+            return 0
+        if self.dry_run:
+            log(f'  [dry-run] would insert-ignore {len(rows)} rows into {table}')
+            return len(rows)
+        for i in range(0, len(rows), BATCH_SUPABASE):
+            self._request('POST', f'/rest/v1/{table}?on_conflict={on_conflict}',
+                          rows[i:i + BATCH_SUPABASE],
+                          {'Prefer': 'resolution=ignore-duplicates,return=minimal'})
+        log(f'  {table}: insert-ignored {len(rows)} rows')
+        return len(rows)
+
     def rpc(self, fn):
         if self.dry_run:
             log(f'  [dry-run] would call rpc/{fn}')
@@ -247,7 +261,8 @@ def sync_invoice_lines(odoo, sb, since, now_iso, until=None):
     moves = {}
     for i in range(0, len(move_ids), BATCH_ODOO):
         for m in odoo.call('account.move', 'read', [move_ids[i:i + BATCH_ODOO]],
-                           fields=['name', 'move_type', 'commercial_partner_id', 'invoice_date', 'date']):
+                           fields=['name', 'move_type', 'commercial_partner_id', 'partner_shipping_id',
+                                   'invoice_date', 'date']):
             moves[m['id']] = m
     # Analytic accounts: distribution keys are analytic account ids -> resolve names once.
     ana_ids = set()
@@ -268,7 +283,10 @@ def sync_invoice_lines(odoo, sb, since, now_iso, until=None):
         dist = l.get('analytic_distribution') or {}
         top_ana = max(dist, key=dist.get) if dist else None
         cp = mv.get('commercial_partner_id')
+        ship = mv.get('partner_shipping_id')
         out.append({
+            'ship_partner_id': ship[0] if isinstance(ship, (list, tuple)) else None,
+            'ship_name': ship[1] if isinstance(ship, (list, tuple)) else None,
             'id': l['id'],
             'move_id': mv.get('id') or (l['move_id'][0] if isinstance(l.get('move_id'), (list, tuple)) else None),
             'move_name': clean(mv.get('name')),
@@ -290,6 +308,16 @@ def sync_invoice_lines(odoo, sb, since, now_iso, until=None):
         if isinstance(cp, (list, tuple)):
             comps[cp[0]] = cp[1]
     sb.upsert('b2b_customers', [{'partner_id': k, 'name': v} for k, v in comps.items()], 'partner_id')
+    # New ship-to addresses land unmapped in location_map (site=null) so they surface in the
+    # dashboard's "(Unmapped)" bucket; existing mappings are never overwritten.
+    ship_partners = {}
+    for m in moves.values():
+        sp = m.get('partner_shipping_id')
+        if isinstance(sp, (list, tuple)):
+            ship_partners[sp[0]] = sp[1]
+    sb.insert_ignore('location_map',
+                     [{'ship_partner_id': k, 'ship_name': v} for k, v in ship_partners.items()],
+                     'ship_partner_id')
     return sb.upsert('invoice_lines', out, 'id')
 
 
@@ -390,6 +418,7 @@ def main():
     ap.add_argument('--until', help='sync data before this date (YYYY-MM-DD, exclusive) - for chunked backfills')
     ap.add_argument('--days', type=int, help='sync the last N days (for scheduled runs)')
     ap.add_argument('--no-refresh', action='store_true', help='skip the rollup refresh (refresh once after the last chunk)')
+    ap.add_argument('--invoices-only', action='store_true', help='only sync invoice lines (skip products/warehouses/sales/moves)')
     ap.add_argument('--dry-run', action='store_true')
     args = ap.parse_args()
     if not args.since and not args.days:
@@ -402,10 +431,13 @@ def main():
     sb = Supabase(dry_run=args.dry_run)
     log(f'Connected to Odoo (uid {odoo.uid}); syncing since {since}')
 
-    n_products = sync_products(odoo, sb, now_iso)
-    stock_loc_to_wh = sync_warehouses(odoo, sb, now_iso)
-    n_sales = sync_sales(odoo, sb, since, now_iso, args.until)
-    n_moves = sync_stock_moves(odoo, sb, since, now_iso, stock_loc_to_wh, args.until)
+    if args.invoices_only:
+        n_products = n_sales = n_moves = 0
+    else:
+        n_products = sync_products(odoo, sb, now_iso)
+        stock_loc_to_wh = sync_warehouses(odoo, sb, now_iso)
+        n_sales = sync_sales(odoo, sb, since, now_iso, args.until)
+        n_moves = sync_stock_moves(odoo, sb, since, now_iso, stock_loc_to_wh, args.until)
     n_inv = sync_invoice_lines(odoo, sb, since, now_iso, args.until)
 
     if args.no_refresh:
