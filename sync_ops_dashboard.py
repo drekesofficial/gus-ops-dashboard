@@ -443,8 +443,17 @@ def main():
     if args.no_refresh:
         log('Skipping rollup refresh (--no-refresh)')
     else:
-        log('Refreshing ops_rollup materialized view...')
-        sb.rpc('refresh_ops_rollup')
+        # The refresh can lose a lock race (e.g. autovacuum) - retry before failing the run.
+        for attempt in range(3):
+            try:
+                log('Refreshing materialized views' + (f' (retry {attempt})' if attempt else '') + '...')
+                sb.rpc('refresh_ops_rollup')
+                break
+            except Exception as e:
+                if attempt == 2:
+                    raise
+                log(f'Refresh failed ({e}); retrying in 90s')
+                time.sleep(90)
     log(f'Done. products={n_products} sales_lines={n_sales} stock_moves={n_moves} invoice_lines={n_inv}')
 
 
