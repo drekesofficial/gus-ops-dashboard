@@ -424,7 +424,7 @@
   }
 
   @media print{
-    #uploadScreen, .controls .seg, .cal-picker, #compareSelect, .file-status button,
+    #uploadScreen, .controls .seg, .cal-picker, .controls select, .file-status button,
     .threshold-input, footer.note{ display:none !important; }
     body{background:#fff;}
     .chart-card{break-inside:avoid;}
@@ -619,6 +619,13 @@
         </div>
         <div id="custWarehousePicker" class="period-picker"></div>
         <div id="custRangePicker"></div>
+        <select id="custCompareSelect">
+          <option value="off">No comparison</option>
+          <option value="prev">vs previous period</option>
+          <option value="yoy">vs same period last year</option>
+          <option value="custom">vs custom period…</option>
+        </select>
+        <div id="custCompareRangePicker" style="display:none;"></div>
         <div class="spacer"></div>
         <span class="file-status" id="custRangeLabel"></span>
       </div>
@@ -696,6 +703,13 @@
         <div id="assortWarehousePicker" class="period-picker"></div>
         <div id="assortCategoryPicker" class="period-picker"></div>
         <div id="assortRangePicker"></div>
+        <select id="assortCompareSelect">
+          <option value="off">No comparison</option>
+          <option value="prev">vs previous period</option>
+          <option value="yoy">vs same period last year</option>
+          <option value="custom">vs custom period…</option>
+        </select>
+        <div id="assortCompareRangePicker" style="display:none;"></div>
         <div class="spacer"></div>
         <span class="file-status" id="assortRangeLabel"></span>
       </div>
@@ -753,6 +767,13 @@
         <div id="b2bRangePicker"></div>
         <input type="text" id="b2bSearch" placeholder="Search location…"
                style="font-family:Raleway,sans-serif;font-size:13px;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 12px;min-width:220px;" />
+        <select id="b2bCompareSelect">
+          <option value="off">No comparison</option>
+          <option value="prev">vs previous period</option>
+          <option value="yoy">vs same period last year</option>
+          <option value="custom">vs custom period…</option>
+        </select>
+        <div id="b2bCompareRangePicker" style="display:none;"></div>
         <div class="spacer"></div>
         <span class="file-status" id="b2bRangeLabel"></span>
       </div>
@@ -762,21 +783,25 @@
           <div class="label">Total revenue</div>
           <div class="value" id="bkpiTotal">—</div>
           <div class="sub">fridge sales + subscriptions + room service</div>
+          <div class="kpi-delta" id="bkpiTotalDelta"></div>
         </div>
         <div class="kpi units">
           <div class="label">Fridge sales</div>
           <div class="value" id="bkpiFridge">—</div>
           <div class="sub" id="bkpiFridgeSub">—</div>
+          <div class="kpi-delta" id="bkpiFridgeDelta"></div>
         </div>
         <div class="kpi scrap">
           <div class="label">Subscription fees</div>
           <div class="value" id="bkpiFees">—</div>
           <div class="sub" id="bkpiFeesSub">—</div>
+          <div class="kpi-delta" id="bkpiFeesDelta"></div>
         </div>
         <div class="kpi adj">
           <div class="label">Room service</div>
           <div class="value" id="bkpiRoom">—</div>
           <div class="sub" id="bkpiRoomSub">—</div>
+          <div class="kpi-delta" id="bkpiRoomDelta"></div>
         </div>
       </div>
 
@@ -1558,20 +1583,31 @@
     return keys;
   }
 
-  function deriveCompareRange(){
-    const mode = document.getElementById('compareSelect').value;
+  // Shared across all tabs: turns a compare-dropdown value + main range into a compare range.
+  function deriveCompareFor(selectId, range, customRange){
+    const mode = document.getElementById(selectId).value;
     if(mode === 'off') return null;
     if(mode === 'prev'){
-      const len = daysBetween(mainRange.start, mainRange.end);
-      const end = addDays(mainRange.start, -1);
+      const len = daysBetween(range.start, range.end);
+      const end = addDays(range.start, -1);
       return { start: addDays(end, -len), end };
     }
     if(mode === 'yoy'){
-      const s = new Date(mainRange.start), e = new Date(mainRange.end);
+      const s = new Date(range.start), e = new Date(range.end);
       s.setFullYear(s.getFullYear()-1); e.setFullYear(e.getFullYear()-1);
       return { start: s, end: e };
     }
-    return customCompareRange; // 'custom'
+    return customRange; // 'custom'
+  }
+  function deriveCompareRange(){
+    return deriveCompareFor('compareSelect', mainRange, customCompareRange);
+  }
+  function wireCompareSelect(selectId, pickerId, refresh){
+    const sel = document.getElementById(selectId);
+    sel.addEventListener('change', () => {
+      document.getElementById(pickerId).style.display = sel.value === 'custom' ? '' : 'none';
+      refresh();
+    });
   }
 
   // ---- Day-granularity store: fetched on demand (full-history day rollup would be huge).
@@ -1662,7 +1698,7 @@
   // Renders the "▲ +12% vs previous period" line under a KPI value.
   // goodIfUp=true means an increase is positive news (revenue, units); false means a decrease
   // is the positive direction (scrap). Net adjustments: an increase (less loss) is good.
-  function renderKpiDelta(elId, curVal, prevVal, fmtFn, goodIfUp){
+  function renderKpiDelta(elId, curVal, prevVal, fmtFn, goodIfUp, label){
     const el = document.getElementById(elId);
     if(prevVal === null || prevVal === undefined){
       el.textContent = '';
@@ -1674,7 +1710,7 @@
     const arrow = diff > 0 ? '▲' : (diff < 0 ? '▼' : '▬');
     const cls = diff === 0 ? '' : (isGood ? 'pos' : 'neg');
     const pctText = pctChange !== null ? ' (' + (pctChange>=0?'+':'') + pctChange.toFixed(1) + '%)' : '';
-    el.innerHTML = '<span class="'+cls+'"><span class="arrow">'+arrow+'</span>'+(diff>=0?'+':'−')+fmtFn(Math.abs(diff))+pctText+'</span> ' + (compareLabelText || 'vs comparison');
+    el.innerHTML = '<span class="'+cls+'"><span class="arrow">'+arrow+'</span>'+(diff>=0?'+':'−')+fmtFn(Math.abs(diff))+pctText+'</span> ' + (label || compareLabelText || 'vs comparison');
   }
   let compareLabelText = '';
 
@@ -2621,6 +2657,9 @@
   });
   let custRange = thisWeekRange();
   createRangePicker('custRangePicker', () => custRange, r => { custRange = r; custRefresh(); }, MAIN_PRESETS);
+  let custCustomCompare = null;
+  createRangePicker('custCompareRangePicker', () => custCustomCompare, r => { custCustomCompare = r; custRefresh(); }, MAIN_PRESETS);
+  wireCompareSelect('custCompareSelect', 'custCompareRangePicker', custRefresh);
 
   let custSelectedFridges = new Set();
   function populateCustWarehouseSelect(){
@@ -2635,11 +2674,9 @@
     return custSelectedFridges.size === ALL_WAREHOUSES.length ? null : [...custSelectedFridges];
   }
 
+  let custCompareLabel = 'vs the preceding period of equal length';
   function custDelta(elId, cur, prev, fmtFn, goodIfUp){
-    const keep = compareLabelText;
-    compareLabelText = 'vs the preceding period of equal length';
-    renderKpiDelta(elId, cur, prev === undefined ? null : prev, fmtFn, goodIfUp);
-    compareLabelText = keep;
+    renderKpiDelta(elId, cur, prev === undefined ? null : prev, fmtFn, goodIfUp, custCompareLabel);
   }
 
   async function custRefresh(){
@@ -2660,12 +2697,15 @@
       const rows = complete.map(p => byP.get(p));
       const rpb = r => r && r.buyers ? r.revenue/r.buyers : 0;
 
-      // KPIs: exact-date range stats (unique customers cannot be summed across periods),
-      // compared against the equal-length window immediately before the range.
+      // KPIs: exact-date range stats (unique customers cannot be summed across periods).
+      // Compared against the dropdown's comparison range, or the equal-length window
+      // immediately before the range when no comparison is selected.
       const iso = d => d.getFullYear() + '-' + pad2(d.getMonth()+1) + '-' + pad2(d.getDate());
+      const custCompare = deriveCompareFor('custCompareSelect', custRange, custCustomCompare);
+      custCompareLabel = custCompare ? 'vs ' + fmtRange(custCompare) : 'vs the preceding period of equal length';
       const len = daysBetween(custRange.start, custRange.end);
-      const prevEnd = addDays(custRange.start, -1);
-      const prevStart = addDays(prevEnd, -len);
+      const prevEnd = custCompare ? custCompare.end : addDays(custRange.start, -1);
+      const prevStart = custCompare ? custCompare.start : addDays(prevEnd, -len);
       const [cur, prevStats] = await Promise.all([
         rpc('get_cust_range', { p_start: iso(custRange.start), p_end: iso(custRange.end), p_warehouses: whs }),
         rpc('get_cust_range', { p_start: iso(prevStart), p_end: iso(prevEnd), p_warehouses: whs })
@@ -2688,11 +2728,21 @@
         { label:'New', data: rows.map(r=>r.new_buyers), color: getVar('--amber') },
         { label:'Returning', data: rows.map(r=>r.buyers - r.new_buyers), color: getVar('--teal') }
       ], { stacked:true, legend:true, yFormat: v=>fmtNum(v), tooltipFormat: v=>fmtNum(v) });
+      // Comparison series aligned by bucket index (1st period vs 1st period, ...),
+      // drawn behind the main series in grey — same convention as the ops tab.
+      let compRows = null;
+      if(custCompare){
+        const compKeys = rangeToKeys(custCompare, custGran).filter(p => byP.has(p));
+        compRows = complete.map((_, i) => byP.get(compKeys[i]) || null);
+      }
+      const withComp = (mainDs, compFn) =>
+        compRows ? [{ label:'Comparison', data: compRows.map(r => r ? compFn(r) : 0), color: COMPARE_GREY }, mainDs] : [mainDs];
       drawLineBar('chartRevPerBuyer', labels,
-        [{ label:'€/customer', data: rows.map(rpb), color: getVar('--kale') }],
+        withComp({ label:'€/customer', data: rows.map(rpb), color: getVar('--kale') }, rpb),
         { yFormat: v=>fmtEUR(v), tooltipFormat: v=>fmtEUR2(v) });
+      const opb = r => r.buyers ? r.orders/r.buyers : 0;
       drawLineBar('chartOrdersPerBuyer', labels,
-        [{ label:'orders/customer', data: rows.map(r=>r.buyers?r.orders/r.buyers:0), color: getVar('--green') }],
+        withComp({ label:'orders/customer', data: rows.map(opb), color: getVar('--green') }, opb),
         { yFormat: v=>v.toFixed(1), tooltipFormat: v=>v.toFixed(2) });
 
       // Concentration + assortment follow the same picked range.
@@ -2800,6 +2850,7 @@
   // ---------- Assortment tab ----------
   let assortStarted = false, assortGran = 'week', assortMode = 'eur';
   let assortRange = thisWeekRange();
+  let assortCustomCompare = null;
   let assortFridges = new Set();
   let assortCats = null; // null = all categories
   // One brand color per chart, dark -> light ladder (9 steps), per the brandbook hues.
@@ -2814,6 +2865,8 @@
     buildAssortWarehousePicker();
     buildAssortCategoryPicker();
     createRangePicker('assortRangePicker', () => assortRange, r => { assortRange = r; assortRefresh(); }, MAIN_PRESETS);
+    createRangePicker('assortCompareRangePicker', () => assortCustomCompare, r => { assortCustomCompare = r; assortRefresh(); }, MAIN_PRESETS);
+    wireCompareSelect('assortCompareSelect', 'assortCompareRangePicker', assortRefresh);
     document.getElementById('assortGranSeg').addEventListener('click', e => {
       const btn = e.target.closest('button');
       if(!btn) return;
@@ -2865,9 +2918,14 @@
     try{
       const keys = rangeToKeys(assortRange, assortGran);
       if(!keys.length) return;
-      const [catRows, prods] = await Promise.all([
+      const assortCompare = deriveCompareFor('assortCompareSelect', assortRange, assortCustomCompare);
+      const compKeys = assortCompare ? rangeToKeys(assortCompare, assortGran) : [];
+      const [catRows, prods, compCatRows] = await Promise.all([
         rpc('get_cat_rollup', { p_granularity: assortGran, p_from: keys[0], p_to: keys[keys.length-1], p_warehouses: whs }),
-        rpc('get_prod_range', { p_start: isoDate(assortRange.start), p_end: isoDate(assortRange.end), p_warehouses: whs })
+        rpc('get_prod_range', { p_start: isoDate(assortRange.start), p_end: isoDate(assortRange.end), p_warehouses: whs }),
+        compKeys.length
+          ? rpc('get_cat_rollup', { p_granularity: assortGran, p_from: compKeys[0], p_to: compKeys[compKeys.length-1], p_warehouses: whs })
+          : Promise.resolve(null)
       ]);
       if(seq !== assortSeq) return;
       document.getElementById('assortRangeLabel').textContent = fmtRange(assortRange);
@@ -2942,7 +3000,7 @@
       renderStackLegend('legendAssortScrap', legendFor(scrapSeries));
       renderStackLegend('legendAssortAdj', legendFor(lossSeries));
 
-      renderAssortCatTable(rows);
+      renderAssortCatTable(rows, compCatRows ? compCatRows.filter(r => inCatSel(r.product_category)) : null, assortCompare);
       renderProdTables(prods.filter(p => inCatSel(p.product_category)));
     }catch(err){
       console.error(err);
@@ -2950,7 +3008,7 @@
     }
   }
 
-  function renderAssortCatTable(rows){
+  function renderAssortCatTable(rows, compRows, compareRange){
     const agg = new Map();
     for(const r of rows){
       const g = catGroup(r.product_category);
@@ -2961,10 +3019,29 @@
       a.lossU += (Number(r.adj_neg_qty)||0) - (Number(r.adj_pos_qty)||0);
       agg.set(g, a);
     }
+    // Comparison-period revenue per category, for the "vs comparison" column.
+    let compAgg = null, compTotal = 0;
+    if(compRows){
+      compAgg = new Map();
+      for(const r of compRows){
+        const g = catGroup(r.product_category);
+        const v = Number(r.revenue)||0;
+        compAgg.set(g, (compAgg.get(g)||0) + v);
+        compTotal += v;
+      }
+    }
+    const revDelta = (cur, prev) => {
+      if(prev === undefined || prev === null) return '<td style="color:var(--ink-soft);">—</td>';
+      const diff = cur - prev;
+      const pct = prev !== 0 ? ' (' + (diff>=0?'+':'') + (diff/Math.abs(prev)*100).toFixed(1) + '%)' : '';
+      const cls = diff === 0 ? '' : (diff > 0 ? 'pos' : 'neg');
+      return '<td class="'+cls+'">' + (diff>=0?'▲ +':'▼ −') + fmtEUR(Math.abs(diff)) + pct + '</td>';
+    };
     const table = document.getElementById('assortCatTable');
     clearNode(table);
-    table.innerHTML = '<thead><tr><th>Category</th><th>Revenue</th><th>Units</th>' +
-      '<th>Scrap €</th><th>Scrap u.</th><th>Net loss €</th><th>Net loss u.</th></tr></thead>';
+    table.innerHTML = '<thead><tr><th>Category</th><th>Revenue</th>' +
+      (compAgg ? '<th title="Revenue vs ' + fmtRange(compareRange) + '">vs comparison</th>' : '') +
+      '<th>Units</th><th>Scrap €</th><th>Scrap u.</th><th>Net loss €</th><th>Net loss u.</th></tr></thead>';
     const tb = document.createElement('tbody');
     const pct = (v,t) => t > 0 ? ' (' + (v/t*100).toFixed(1) + '%)' : '';
     const rowsSorted = [...agg.entries()].sort((a,b)=>b[1].revV-a[1].revV);
@@ -2983,6 +3060,7 @@
       c[6].textContent = fmtNum(a.lossU) + pct(Math.abs(a.lossU), a.revU);
       if(a.revV > 0 && a.scrV/a.revV > 0.15) c[3].className = 'neg';
       if(a.revV > 0 && Math.abs(a.lossV)/a.revV > 0.05 && a.lossV > 0) c[5].className = 'neg';
+      if(compAgg) c[1].insertAdjacentHTML('afterend', revDelta(a.revV, compAgg.get(g) || 0));
       tb.appendChild(tr);
     });
     const trT = document.createElement('tr');
@@ -2995,6 +3073,7 @@
     ct[4].textContent = fmtNum(tot.scrU) + pct(tot.scrU, tot.revU);
     ct[5].textContent = fmtEUR(tot.lossV) + pct(Math.abs(tot.lossV), tot.revV);
     ct[6].textContent = fmtNum(tot.lossU) + pct(Math.abs(tot.lossU), tot.revU);
+    if(compAgg) ct[1].insertAdjacentHTML('afterend', revDelta(tot.revV, compTotal));
     tb.appendChild(trT);
     table.appendChild(tb);
   }
@@ -3018,8 +3097,11 @@
     return keys;
   }
 
+  let b2bCustomCompare = null;
   function b2bInit(){
     createRangePicker('b2bRangePicker', () => b2bRange, r => { b2bRange = r; b2bRefresh(); }, MAIN_PRESETS);
+    createRangePicker('b2bCompareRangePicker', () => b2bCustomCompare, r => { b2bCustomCompare = r; b2bRefresh(); }, MAIN_PRESETS);
+    wireCompareSelect('b2bCompareSelect', 'b2bCompareRangePicker', b2bRefresh);
     document.getElementById('b2bSearch').addEventListener('input', renderB2bTable);
     document.getElementById('b2bDetailClose').addEventListener('click', () => {
       document.getElementById('b2bDetailCard').style.display = 'none';
@@ -3033,9 +3115,13 @@
     document.getElementById('b2bRangeLabel').textContent = 'Loading…';
     try{
       const pFrom = ymKey(b2bRange.start), pTo = ymKey(b2bRange.end);
-      const [rows, meta] = await Promise.all([
+      const b2bCompare = deriveCompareFor('b2bCompareSelect', b2bRange, b2bCustomCompare);
+      const [rows, meta, compRows] = await Promise.all([
         rpc('get_b2b_summary', { p_from: pFrom, p_to: pTo }),
-        b2bMeta ? Promise.resolve(b2bMeta) : rpc('get_b2b_meta')
+        b2bMeta ? Promise.resolve(b2bMeta) : rpc('get_b2b_meta'),
+        b2bCompare
+          ? rpc('get_b2b_summary', { p_from: ymKey(b2bCompare.start), p_to: ymKey(b2bCompare.end) })
+          : Promise.resolve(null)
       ]);
       if(seq !== b2bSeq) return;
       b2bMeta = meta;
@@ -3060,6 +3146,14 @@
       document.getElementById('bkpiFeesSub').textContent = shr(tot('fees_revenue')).replace(/[()]/g,'') || '—';
       document.getElementById('bkpiRoom').textContent = fmtEUR(tot('room_revenue'));
       document.getElementById('bkpiRoomSub').textContent = shr(tot('room_revenue')).replace(/[()]/g,'') || '—';
+
+      // KPI deltas vs the comparison range (dropdown), months-of-invoice resolution.
+      const compTot = f => compRows ? compRows.reduce((a,r)=>a+(Number(r[f])||0),0) : null;
+      const b2bLabel = b2bCompare ? 'vs ' + fmtRange(b2bCompare) : '';
+      renderKpiDelta('bkpiTotalDelta', grand, compTot('total_revenue'), fmtEUR, true, b2bLabel);
+      renderKpiDelta('bkpiFridgeDelta', tot('fridge_revenue'), compTot('fridge_revenue'), fmtEUR, true, b2bLabel);
+      renderKpiDelta('bkpiFeesDelta', tot('fees_revenue'), compTot('fees_revenue'), fmtEUR, true, b2bLabel);
+      renderKpiDelta('bkpiRoomDelta', tot('room_revenue'), compTot('room_revenue'), fmtEUR, true, b2bLabel);
 
       renderB2bTable();
     }catch(err){
