@@ -1448,6 +1448,8 @@
     const tree = new Map(); // nested: segment -> { children: Map, values: [] }
     for(const cat of ALL_CATEGORIES){
       const segs = cat.split(' / ').filter((x,i) => !(i===0 && x==='All'));
+      // A product left in Odoo's root "All" category yields no segments — give it a home.
+      if(!segs.length) segs.push('Uncategorized');
       let level = tree;
       let node = null;
       const path = [];
